@@ -193,6 +193,40 @@ func TestAggregateDependsHostArchMismatchExcludes(t *testing.T) {
 	}
 }
 
+// TestExpandSelectionDeterministic guards against collectDependencyClosure
+// iterating a package's dependency map directly (Go map iteration order is
+// randomized per range statement, so a regression here wouldn't necessarily
+// show up on the first run - looping catches it reliably in practice).
+func TestExpandSelectionDeterministic(t *testing.T) {
+	idx := fixtureIndex(t, "x86")
+	opts := &Options{
+		Package:         []string{"Microsoft.VisualStudio.Workload.VCTools"},
+		HostArch:        "x86",
+		OnlyHost:        true,
+		IncludeOptional: true,
+	}
+	first, err := ExpandSelection(idx, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := idsOf(first)
+	for i := 0; i < 50; i++ {
+		got, err := ExpandSelection(idx, opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		gotIDs := idsOf(got)
+		if len(gotIDs) != len(want) {
+			t.Fatalf("run %d: got %v, want %v", i, gotIDs, want)
+		}
+		for j := range want {
+			if gotIDs[j] != want[j] {
+				t.Fatalf("run %d: order changed: got %v, want %v", i, gotIDs, want)
+			}
+		}
+	}
+}
+
 func idsOf(pkgs []*Package) []string {
 	var ids []string
 	for _, p := range pkgs {
