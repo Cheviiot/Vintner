@@ -43,7 +43,15 @@ type Options struct {
 	SkipRecommended bool
 	Language        string
 
-	WithWDKInstallers string
+	// WithWDK selects the PlatformToolset registration
+	// (Component.Microsoft.Windows.DriverKit.BuildTools) that lets MSBuild
+	// recognize WindowsKernelModeDriver10.0/WindowsUserModeDriver10.0
+	// PlatformToolsets. It's not part of the manifest-driven default
+	// selection - unlike everything else it depends on, it's opt-in via
+	// --with-wdk, since the actual driver headers/libs come from a separate
+	// NuGet package download handled outside ExpandSelection entirely (see
+	// wdk.go and cmd/msvc-go-wine's runDownload).
+	WithWDK bool
 }
 
 func addIfWanted(opts *Options, flag TriState, pkg string) {
@@ -242,7 +250,7 @@ func ResolveSelection(opts *Options, idx Index) error {
 	addIfWanted(opts, opts.WithDevCmd, "Microsoft.VisualStudio.VC.vcvars")
 	addIfWanted(opts, opts.WithDevCmd, "Microsoft.VisualStudio.PackageGroup.VsDevCmd")
 
-	if opts.WithWDKInstallers != "" {
+	if opts.WithWDK {
 		opts.Package = append(opts.Package, "Component.Microsoft.Windows.DriverKit.BuildTools")
 	}
 

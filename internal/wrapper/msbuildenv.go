@@ -1,6 +1,7 @@
 package wrapper
 
 import (
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -19,12 +20,20 @@ var reToolsetDir = regexp.MustCompile(`^v(\d+)$`)
 // Windows Registry.
 func msbuildEnv(cfg *wineenv.Config, paths *wineenv.Paths) map[string]string {
 	env := map[string]string{
+		// WDK driver builds stamp the INF's DriverVer with StampInf (which
+		// uses the local wall-clock date) and then validate it with
+		// Inf2Cat (which checks against UTC "now"). For any timezone east
+		// of UTC, local-vs-UTC disagree on the calendar date for most of
+		// the day, so Inf2Cat rejects the just-stamped date as "postdated"
+		// (MSB6006, "DriverVer set to a date in the future"). Forcing both
+		// tools onto the same UTC clock removes the mismatch.
+		"TZ": "UTC",
+
 		"DisableRegistryUse": "true",
 		"VCToolsVersion":     cfg.MSVCVer,
 		"VsInstallRoot":      paths.BaseWin + `\`,
 		"VSInstallDir":       paths.BaseWin + `\`,
 
-		"MicrosoftKitRoot":                          paths.BaseWin + `\`,
 		"SDKReferenceDirectoryRoot":                 paths.BaseWin + `\`,
 		"SDKExtensionDirectoryRoot":                 paths.BaseWin + `\`,
 		"MSBUILDSDKREFERENCEDIRECTORY":              paths.BaseWin + `\`,
@@ -67,6 +76,19 @@ func msbuildEnv(cfg *wineenv.Config, paths *wineenv.Paths) map[string]string {
 
 	if strings.HasSuffix(paths.MSBuildBinDir, "amd64") {
 		env["PreferredToolArchitecture"] = "x64"
+	}
+
+	// The WindowsKernelModeDriver10.0/WindowsUserModeDriver10.0
+	// PlatformToolsets (registered by `download --with-wdk`, see
+	// internal/download/wdk.go) resolve WDKContentRoot through the
+	// (nonexistent, under Wine) registry unless it's already set - same
+	// DisableRegistryUse workaround as WindowsSdkDir_10 above. WDKBuildFolder
+	// picks the per-SDK-build subtree (c/build/<ver>/...) the NuGet
+	// package's content is organized under.
+	wdkContentRoot := filepath.Join(paths.BaseUnix, "wdk", cfg.Arch, "c")
+	if fi, err := os.Stat(wdkContentRoot); err == nil && fi.IsDir() {
+		env["WDKContentRoot"] = wineenv.ToWinPath(wdkContentRoot) + `\`
+		env["WDKBuildFolder"] = cfg.SDKVer
 	}
 
 	return env

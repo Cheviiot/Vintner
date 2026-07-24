@@ -33,6 +33,7 @@ func runDownload(args []string) int {
 	listWorkloads := fs.Bool("list-workloads", false, "list available workloads from the manifest and exit, without downloading anything")
 	listComponents := fs.Bool("list-components", false, "list available components from the manifest and exit, without downloading anything")
 	printDepsTree := fs.Bool("print-deps-tree", false, "print the dependency tree of the selected packages and exit, without downloading anything")
+	withWDK := fs.Bool("with-wdk", false, "also fetch and install the Windows Driver Kit (headers, libs and MSBuild driver PlatformToolsets, for building KMDF/UMDF drivers)")
 	var archsFlag stringList
 	fs.Var(&archsFlag, "architecture", "target architecture to include (x86, x64, arm, arm64, host); repeatable")
 	var ignoreFlag stringList
@@ -54,6 +55,7 @@ func runDownload(args []string) int {
 		IncludeOptional: *includeOptional,
 		SkipRecommended: *skipRecommended,
 		Language:        *language,
+		WithWDK:         *withWDK,
 	}
 
 	manifestURL := *manifestFile
@@ -198,8 +200,56 @@ func runDownload(args []string) int {
 		}
 	}
 
+	if opts.WithWDK && !*onlyUnpack {
+		if err := downloadWDK(opts, selected, cache, destAbs, *major); err != nil {
+			fmt.Fprintln(os.Stderr, "msvc-go-wine download:", err)
+			return 1
+		}
+	}
+
 	fmt.Println("Done. Next: msvc-go-wine install", destAbs)
 	return 0
+}
+
+// downloadWDK fetches the WDK NuGet package(s) matching opts.Architecture
+// (only x64 and arm64 have one - there's no WDK package for x86/arm
+// targets) into destAbs/wdk/<arch>, preferring a version matching the
+// Windows SDK actually selected. See wdk.go for why this is a separate
+// download path from the rest of ExpandSelection/FetchPayloads/Unpack.
+func downloadWDK(opts *download.Options, selected []*download.Package, cache, destAbs string, major int) error {
+	sdkBuild := download.SDKBuildPrefix(selected)
+	vsVersion := fmt.Sprintf("%d.0", major)
+	var archs []string
+	for _, a := range []string{"x64", "arm64"} {
+		if contains(opts.Architecture, a) {
+			archs = append(archs, a)
+		}
+	}
+	if len(archs) == 0 {
+		fmt.Println("--with-wdk: no x64/arm64 target architecture selected, skipping (no WDK package exists for x86/arm)")
+		return nil
+	}
+	for _, arch := range archs {
+		version, err := download.FetchLatestWDKVersion(arch, sdkBuild)
+		if err != nil {
+			return err
+		}
+		wdkDir, err := download.DownloadWDK(arch, version, cache, destAbs, vsVersion)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("Installed WDK (%s) %s at %s\n", arch, version, wdkDir)
+	}
+	return nil
+}
+
+func contains(list []string, v string) bool {
+	for _, s := range list {
+		if s == v {
+			return true
+		}
+	}
+	return false
 }
 
 // printPackageList prints one line per package: its ID, and (when the
