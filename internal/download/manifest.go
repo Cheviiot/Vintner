@@ -40,11 +40,15 @@ type Dependency struct {
 	Type     string // "", "Optional" or "Recommended"
 }
 
-// LocalizedResource carries the license URL shown before accepting a
-// package's terms.
+// LocalizedResource carries a package's human-readable title/description
+// (shown by --list-workloads/--list-components) and the license URL shown
+// before accepting a package's terms.
 type LocalizedResource struct {
-	Language string `json:"language"`
-	License  string `json:"license"`
+	Language    string `json:"language"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	Category    string `json:"category"`
+	License     string `json:"license"`
 }
 
 // Package is one entry from the installer manifest's "packages" array.
@@ -108,6 +112,39 @@ func (p *Package) Key() string {
 	return key
 }
 
+// Localized returns p's LocalizedResource best matching language ("" means
+// "en"), preferring an exact match, then any en-* entry, then whatever's
+// first. Returns nil if p has no localized resources at all.
+func (p *Package) Localized(language string) *LocalizedResource {
+	if len(p.LocalizedResources) == 0 {
+		return nil
+	}
+	if language == "" {
+		language = "en"
+	}
+	language = strings.ToLower(language)
+	best := &p.LocalizedResources[0]
+	bestScore := -1
+	for i := range p.LocalizedResources {
+		lr := &p.LocalizedResources[i]
+		lang := strings.ToLower(lr.Language)
+		score := 0
+		switch {
+		case lang == language:
+			score = 3
+		case strings.HasPrefix(lang, language+"-"):
+			score = 2
+		case strings.HasPrefix(lang, "en"):
+			score = 1
+		}
+		if score > bestScore {
+			bestScore = score
+			best = lr
+		}
+	}
+	return best
+}
+
 func (p *Package) InstalledSize() int64 {
 	var sum int64
 	for _, v := range p.InstallSizes {
@@ -146,6 +183,15 @@ type Manifest struct {
 // and a few retries - transient network hiccups shouldn't need a full
 // restart of `download`.
 var httpClient = &http.Client{Timeout: 5 * time.Minute}
+
+func init() {
+	// --manifest points at a local file, fetched through this same client
+	// via a "file:" URL (see cmd/msvc-go-wine's runDownload) - so it needs a
+	// registered "file" handler alongside the default http/https transport.
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	t.RegisterProtocol("file", http.NewFileTransport(http.Dir("/")))
+	httpClient.Transport = t
+}
 
 const maxManifestAttempts = 5
 

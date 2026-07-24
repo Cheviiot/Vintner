@@ -2,7 +2,9 @@ package download
 
 import (
 	"fmt"
+	"io"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -366,4 +368,74 @@ func ExpandSelection(idx Index, opts *Options) ([]*Package, error) {
 		ret = append(ret, collectDependencyClosure(idx, included, id, nil, opts)...)
 	}
 	return ret, nil
+}
+
+// PrintDependencyTree writes an indented tree of opts.Package and everything
+// they transitively depend on to w, applying the exact same
+// arch/--ignore/Optional/Recommended filtering collectDependencyClosure
+// (used by ExpandSelection) does, so what's printed matches what an actual
+// download would select. A package already printed once elsewhere in the
+// tree is shown again as a leaf ("(see above)") rather than re-expanded, to
+// keep the output finite for packages multiple components depend on.
+func PrintDependencyTree(w io.Writer, idx Index, opts *Options) {
+	printed := map[string]bool{}
+	for _, id := range opts.Package {
+		printDepNode(w, idx, id, nil, "", opts, 0, printed)
+	}
+}
+
+func printDepNode(w io.Writer, idx Index, target string, constraints map[string]string, depType string, opts *Options, depth int, printed map[string]bool) {
+	if contains(opts.Ignore, strings.ToLower(target)) {
+		return
+	}
+	indent := strings.Repeat("  ", depth)
+	annotation := ""
+	if depType != "" {
+		annotation = " [" + depType + "]"
+	}
+
+	p := idx.Find(target, constraints)
+	if p == nil {
+		fmt.Fprintf(w, "%s%s (not found)%s\n", indent, target, annotation)
+		return
+	}
+	if opts.OnlyHost && !HostArchCompatible(p, opts.HostArch) {
+		return
+	}
+	if !TargetArchCompatible(p, opts.Architecture) {
+		return
+	}
+
+	key := p.Key()
+	if printed[key] {
+		fmt.Fprintf(w, "%s%s%s (see above)\n", indent, p.ID, annotation)
+		return
+	}
+	printed[key] = true
+	fmt.Fprintf(w, "%s%s@%s%s\n", indent, p.ID, p.Version, annotation)
+
+	deps := p.Dependencies()
+	targets := make([]string, 0, len(deps))
+	for t := range deps {
+		targets = append(targets, t)
+	}
+	sort.Strings(targets)
+	for _, depTarget := range targets {
+		dep := deps[depTarget]
+		id := depTarget
+		if dep.TargetID != "" {
+			id = dep.TargetID
+		}
+		if dep.Type == "Optional" && !opts.IncludeOptional {
+			continue
+		}
+		if dep.Type == "Recommended" && opts.SkipRecommended {
+			continue
+		}
+		c := map[string]string{}
+		if dep.Version != "" {
+			c["version"] = dep.Version
+		}
+		printDepNode(w, idx, id, c, dep.Type, opts, depth+1, printed)
+	}
 }

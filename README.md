@@ -68,7 +68,15 @@ msvc-go-wine version                                              print the vers
 `--host-arch`, `--with-*` component toggles, `--ignore`, `--only-download`,
 `--only-unpack`, `--keep-unpack`, `--cache`, `--language`,
 `--include-optional`, `--skip-recommended`, `--major`, `--preview`,
-`--manifest`. Run `msvc-go-wine download -h` for the full list.
+`--manifest`, `--list-workloads`, `--list-components`, `--print-deps-tree`.
+Run `msvc-go-wine download -h` for the full list.
+
+`--list-workloads`/`--list-components` print every workload/component id
+(with its human-readable title) available in the fetched manifest and exit
+without downloading anything - useful for discovering what to pass as a bare
+package id or via `--with-*`. `--print-deps-tree` prints the dependency tree
+of whatever would actually be selected (honoring every other flag), also
+without downloading.
 
 ### Using clang-cl/lld-link instead of Wine
 
@@ -116,10 +124,10 @@ telemetry, and don't hard-fail devcmd setup when an optional component
 
 ## Known gaps
 
-- `download` doesn't yet support printing the dependency/reverse-dependency
-  tree, listing available workloads/components/packages, or installing the
-  Windows Driver Kit via `--with-wdk-installers`; the core selection/
-  download/unpack/install pipeline is fully implemented.
+- `download` doesn't yet support installing the Windows Driver Kit via
+  `--with-wdk-installers`; the core selection/download/unpack/install
+  pipeline, dependency tree printing, and workload/component listing are all
+  fully implemented.
 
 ## License
 

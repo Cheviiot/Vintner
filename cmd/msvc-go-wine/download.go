@@ -30,6 +30,9 @@ func runDownload(args []string) int {
 	onlyUnpack := fs.Bool("only-unpack", false, "unpack selected packages and keep everything, without pruning to just the CLI tools")
 	keepUnpack := fs.Bool("keep-unpack", false, "keep the scratch unpack dir instead of removing it after moving files into place")
 	skipPatch := fs.Bool("skip-patch", false, "don't apply the Wine compatibility patches")
+	listWorkloads := fs.Bool("list-workloads", false, "list available workloads from the manifest and exit, without downloading anything")
+	listComponents := fs.Bool("list-components", false, "list available components from the manifest and exit, without downloading anything")
+	printDepsTree := fs.Bool("print-deps-tree", false, "print the dependency tree of the selected packages and exit, without downloading anything")
 	var archsFlag stringList
 	fs.Var(&archsFlag, "architecture", "target architecture to include (x86, x64, arm, arm64, host); repeatable")
 	var ignoreFlag stringList
@@ -78,7 +81,17 @@ func runDownload(args []string) int {
 
 	idx := download.BuildIndex(manifest, opts.HostArch, opts.Language)
 
-	if !*acceptLicense {
+	if *listWorkloads || *listComponents {
+		if *listWorkloads {
+			printPackageList("Workload", download.PackagesByType(idx, "Workload"), opts.Language)
+		}
+		if *listComponents {
+			printPackageList("Component", download.PackagesByType(idx, "Component"), opts.Language)
+		}
+		return 0
+	}
+
+	if !*acceptLicense && !*printDepsTree {
 		license := "the Visual Studio Build Tools license"
 		if p := idx.Find("Microsoft.VisualStudio.Product.BuildTools", nil); p != nil && len(p.LocalizedResources) > 0 {
 			license = p.LocalizedResources[0].License
@@ -91,6 +104,11 @@ func runDownload(args []string) int {
 	if err := download.ResolveSelection(opts, idx); err != nil {
 		fmt.Fprintln(os.Stderr, "msvc-go-wine download:", err)
 		return 1
+	}
+
+	if *printDepsTree {
+		download.PrintDependencyTree(os.Stdout, idx, opts)
+		return 0
 	}
 
 	selected, err := download.ExpandSelection(idx, opts)
@@ -182,6 +200,19 @@ func runDownload(args []string) int {
 
 	fmt.Println("Done. Next: msvc-go-wine install", destAbs)
 	return 0
+}
+
+// printPackageList prints one line per package: its ID, and (when the
+// manifest carries one) its human-readable title in the requested language.
+func printPackageList(kind string, pkgs []*download.Package, language string) {
+	fmt.Printf("Available %ss (%d):\n", kind, len(pkgs))
+	for _, p := range pkgs {
+		if lr := p.Localized(language); lr != nil && lr.Title != "" {
+			fmt.Printf("  %-65s %s\n", p.ID, lr.Title)
+		} else {
+			fmt.Printf("  %s\n", p.ID)
+		}
+	}
 }
 
 func detectHostArch() string {
