@@ -10,9 +10,19 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/Cheviiot/msvc-go-wine/internal/wineenv"
 )
+
+// pipeDrainGrace bounds how long we wait for a tool's stdout/stderr copy
+// goroutines to see EOF after the tool's own process has already exited.
+// Wine keeps wineserver and its service processes (services.exe,
+// winedevice.exe, explorer.exe, ...) running in the background for reuse
+// across invocations, and they inherit our pipes' write ends - so EOF can
+// otherwise never arrive, hanging any caller piping our output (`| tee`,
+// `| tail`, CI log capture) long after the actual build finished.
+const pipeDrainGrace = 500 * time.Millisecond
 
 // toolRelayName is where `msvc-go-wine install` places the compiled
 // toolrelay.exe helper, shared across all arch bin dirs.
@@ -70,9 +80,10 @@ func Run(tool string, args []string) int {
 	var exitCode int
 	switch {
 	case s.rawStdout:
-		// MSBuild: skip all filtering/toolrelay, inherit stdio directly, and
-		// add the extra environment MSBuild's own toolset/SDK-detection
-		// props need on top of the generic INCLUDE/LIB/WINEPATH.
+		// MSBuild: skip all filtering/toolrelay (its output is meant to be
+		// read as-is), and add the extra environment MSBuild's own
+		// toolset/SDK-detection props need on top of the generic
+		// INCLUDE/LIB/WINEPATH.
 		cmd := exec.Command(wineBin, append([]string{toolExePath}, rewritten...)...)
 		env := buildEnv(paths)
 		for k, v := range msbuildEnv(cfg, paths) {
@@ -80,9 +91,7 @@ func Run(tool string, args []string) int {
 		}
 		cmd.Env = env
 		cmd.Stdin = os.Stdin
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		exitCode = runAndWait(cmd)
+		exitCode = runRawStdout(cmd)
 	default:
 		relay := filepath.Join(paths.BaseUnix, "bin", toolRelayName)
 		if fi, err := os.Stat(relay); err == nil && !fi.IsDir() {
@@ -173,6 +182,57 @@ func runViaToolRelay(wineBin, relayExe, exePath string, args []string, paths *wi
 	return 0
 }
 
+// runRawStdout runs cmd, copying its stdout/stderr through byte-for-byte
+// (MSBuild's own console formatting is meant to reach the user as-is). It
+// pipes rather than inheriting os.Stdout/os.Stderr directly so that only our
+// own copy goroutines - not the caller's terminal or pipe - are exposed to
+// Wine's background processes holding those descriptors open; see
+// pipeDrainGrace.
+func runRawStdout(cmd *exec.Cmd) int {
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "msvc-go-wine:", err)
+		return 1
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "msvc-go-wine:", err)
+		return 1
+	}
+
+	if err := cmd.Start(); err != nil {
+		fmt.Fprintln(os.Stderr, "msvc-go-wine:", err)
+		return 1
+	}
+
+	doneOut := make(chan struct{})
+	doneErr := make(chan struct{})
+	go func() { io.Copy(os.Stdout, stdout); close(doneOut) }()
+	go func() { io.Copy(os.Stderr, stderr); close(doneErr) }()
+
+	err = cmd.Wait()
+	drain(doneOut)
+	drain(doneErr)
+
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return exitErr.ExitCode()
+		}
+		fmt.Fprintln(os.Stderr, "msvc-go-wine:", err)
+		return 1
+	}
+	return 0
+}
+
+// drain waits for a pipe-copy goroutine to see EOF, but not past
+// pipeDrainGrace - see its doc comment for why EOF can otherwise never come.
+func drain(done <-chan struct{}) {
+	select {
+	case <-done:
+	case <-time.After(pipeDrainGrace):
+	}
+}
+
 func buildEnv(p *wineenv.Paths) []string {
 	overrides := map[string]string{
 		"INCLUDE":          p.Include,
@@ -219,13 +279,16 @@ func runFiltered(cmd *exec.Cmd, stdoutF, stderrF lineFilter) int {
 		return 1
 	}
 
-	var wg sync.WaitGroup
-	wg.Add(2)
-	go func() { defer wg.Done(); pumpLines(stdout, os.Stdout, stdoutF) }()
-	go func() { defer wg.Done(); pumpLines(stderr, os.Stderr, stderrF) }()
-	wg.Wait()
+	doneOut := make(chan struct{})
+	doneErr := make(chan struct{})
+	go func() { pumpLines(stdout, os.Stdout, stdoutF); close(doneOut) }()
+	go func() { pumpLines(stderr, os.Stderr, stderrF); close(doneErr) }()
 
-	if err := cmd.Wait(); err != nil {
+	err = cmd.Wait()
+	drain(doneOut)
+	drain(doneErr)
+
+	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			return exitErr.ExitCode()
 		}
@@ -247,15 +310,4 @@ func pumpLines(r io.Reader, w *os.File, filter lineFilter) {
 		}
 		fmt.Fprintln(w, line)
 	}
-}
-
-func runAndWait(cmd *exec.Cmd) int {
-	if err := cmd.Run(); err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			return exitErr.ExitCode()
-		}
-		fmt.Fprintln(os.Stderr, "msvc-go-wine:", err)
-		return 1
-	}
-	return 0
 }
