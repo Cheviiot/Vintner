@@ -15,6 +15,10 @@ import (
 	"github.com/Cheviiot/msvc-go-wine/internal/wrapper"
 )
 
+// version is set at build time via -ldflags "-X main.version=X.Y.Z";
+// left as "dev" for plain `go build`/`go run`.
+var version = "dev"
+
 func main() {
 	base := filepath.Base(os.Args[0])
 	name := strings.TrimSuffix(strings.ToLower(base), ".exe")
@@ -43,7 +47,7 @@ func runCLI(args []string) int {
 	case "env":
 		return runEnv(args[1:])
 	case "version":
-		fmt.Println("msvc-go-wine dev")
+		fmt.Println("msvc-go-wine " + version)
 		return 0
 	case "-h", "--help", "help":
 		printUsage()
