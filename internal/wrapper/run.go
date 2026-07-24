@@ -70,9 +70,15 @@ func Run(tool string, args []string) int {
 	var exitCode int
 	switch {
 	case s.rawStdout:
-		// MSBuild: skip all filtering/toolrelay, inherit stdio directly.
+		// MSBuild: skip all filtering/toolrelay, inherit stdio directly, and
+		// add the extra environment MSBuild's own toolset/SDK-detection
+		// props need on top of the generic INCLUDE/LIB/WINEPATH.
 		cmd := exec.Command(wineBin, append([]string{toolExePath}, rewritten...)...)
-		cmd.Env = buildEnv(paths)
+		env := buildEnv(paths)
+		for k, v := range msbuildEnv(cfg, paths) {
+			env = append(env, k+"="+v)
+		}
+		cmd.Env = env
 		cmd.Stdin = os.Stdin
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr

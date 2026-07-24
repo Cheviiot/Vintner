@@ -16,6 +16,14 @@ type Paths struct {
 	SDKBinDir     string // <dest>/kits/10/bin/<sdkver>/<host> - mc/midl/mt/rc live here
 	MSBuildBinDir string // <dest>/MSBuild/Current/Bin/<dotnetHost> - MSBuild.exe lives here
 
+	// Windows-notation ("z:\...") equivalents of the paths above, needed to
+	// populate the MSBuild-specific environment variables its toolset/SDK
+	// detection props read (see msbuildEnv in the wrapper package).
+	BaseWin     string // z:\<dest>
+	MSVCBaseWin string // z:\<dest>\vc
+	MSVCDirWin  string // z:\<dest>\vc\tools\msvc\<ver>
+	SDKBaseWin  string // z:\<dest>\kits\10
+
 	Include          string
 	Lib              string
 	LibPath          string
@@ -88,6 +96,11 @@ func NewPaths(cfg *Config, baseUnix string) *Paths {
 		BinDir:        binDir,
 		SDKBinDir:     sdkBinDir,
 		MSBuildBinDir: msbuildBinDir,
+
+		BaseWin:     winBase,
+		MSVCBaseWin: msvcBase,
+		MSVCDirWin:  msvcDirWin,
+		SDKBaseWin:  sdkBase,
 
 		Include:          include,
 		Lib:              lib,
