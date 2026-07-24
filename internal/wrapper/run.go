@@ -310,4 +310,11 @@ func pumpLines(r io.Reader, w *os.File, filter lineFilter) {
 		}
 		fmt.Fprintln(w, line)
 	}
+	// bufio.Scanner silently stops (dropping the rest of the stream) once a
+	// single line exceeds its 16MB buffer - surface that rather than letting
+	// build output vanish without explanation (heavily templated C++ error
+	// messages are the realistic way to hit this).
+	if err := scanner.Err(); err != nil {
+		fmt.Fprintf(w, "vintner: output truncated: %v\n", err)
+	}
 }

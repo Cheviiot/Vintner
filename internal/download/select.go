@@ -15,8 +15,7 @@ var reSDKVersion = regexp.MustCompile(`^\d+\.\d+\.\d+`)
 // default) explicitly chose to include/exclude the component.
 type TriState = *bool
 
-func on() TriState  { v := true; return &v }
-func off() TriState { v := false; return &v }
+func on() TriState { v := true; return &v }
 
 // Options holds every flag that feeds package selection and download.
 type Options struct {
@@ -303,6 +302,7 @@ func selectSDK(opts *Options, idx Index) error {
 			}
 		}
 		if !found {
+			sort.Strings(versions)
 			return fmt.Errorf("WinSDK version %s not found (available: %s)", opts.SDKVersion, strings.Join(versions, ", "))
 		}
 	}
@@ -347,7 +347,14 @@ func collectDependencyClosure(idx Index, included map[string]bool, target string
 	included[key] = true
 
 	ret := []*Package{p}
-	for target, dep := range p.Dependencies() {
+	deps := p.Dependencies()
+	targets := make([]string, 0, len(deps))
+	for target := range deps {
+		targets = append(targets, target)
+	}
+	sort.Strings(targets)
+	for _, target := range targets {
+		dep := deps[target]
 		id := target
 		if dep.TargetID != "" {
 			id = dep.TargetID

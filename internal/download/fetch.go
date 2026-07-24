@@ -84,6 +84,9 @@ func FetchPayloads(selected []*Package, cacheDir string, allowHashMismatch bool)
 func fetchOnePayloadWithRetries(payload Payload, dest, fileID string, allowHashMismatch bool) (int64, error) {
 	var lastErr error
 	for attempt := 0; attempt < maxDownloadAttempts; attempt++ {
+		if attempt > 0 {
+			time.Sleep(retryBackoff(attempt))
+		}
 		n, err := tryDownloadPayload(payload, dest, fileID, allowHashMismatch)
 		if err == nil {
 			return n, nil
@@ -92,6 +95,17 @@ func fetchOnePayloadWithRetries(payload Payload, dest, fileID string, allowHashM
 		fmt.Printf("%v\n", err)
 	}
 	return 0, fmt.Errorf("giving up on %s after %d attempts: %w", fileID, maxDownloadAttempts, lastErr)
+}
+
+// retryBackoff gives a transient failure (network blip, momentary rate
+// limiting) a little room to clear before hammering the same URL again:
+// 1s, 2s, 4s, 8s, capped at 10s.
+func retryBackoff(attempt int) time.Duration {
+	d := time.Second << uint(attempt-1)
+	if d > 10*time.Second {
+		d = 10 * time.Second
+	}
+	return d
 }
 
 func tryDownloadPayload(payload Payload, dest, fileID string, allowHashMismatch bool) (int64, error) {

@@ -45,6 +45,17 @@ func runDownload(args []string) int {
 	}
 	packages := fs.Args()
 
+	for _, a := range archsFlag {
+		if !validArchitectures[a] {
+			fmt.Fprintf(os.Stderr, "vintner download: invalid --architecture %q (expected one of x86, x64, arm, arm64, host)\n", a)
+			return 2
+		}
+	}
+	if *hostArch != "" && !validHostArchs[*hostArch] {
+		fmt.Fprintf(os.Stderr, "vintner download: invalid --host-arch %q (expected one of x86, x64, arm64)\n", *hostArch)
+		return 2
+	}
+
 	opts := &download.Options{
 		Package:         packages,
 		Ignore:          []string(ignoreFlag),
@@ -266,6 +277,9 @@ func printPackageList(headerKey string, pkgs []*download.Package, language strin
 		}
 	}
 }
+
+var validArchitectures = map[string]bool{"x86": true, "x64": true, "arm": true, "arm64": true, "host": true}
+var validHostArchs = map[string]bool{"x86": true, "x64": true, "arm64": true}
 
 func detectHostArch() string {
 	if runtime.GOARCH == "arm64" {

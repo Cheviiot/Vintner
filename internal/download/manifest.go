@@ -198,6 +198,9 @@ const maxManifestAttempts = 5
 func httpGet(url string) ([]byte, error) {
 	var lastErr error
 	for attempt := 0; attempt < maxManifestAttempts; attempt++ {
+		if attempt > 0 {
+			time.Sleep(retryBackoff(attempt))
+		}
 		data, err := tryHTTPGet(url)
 		if err == nil {
 			return data, nil
