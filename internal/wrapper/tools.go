@@ -4,7 +4,7 @@
 // filtering its output.
 package wrapper
 
-import "github.com/Cheviiot/msvc-go-wine/internal/wineenv"
+import "github.com/Cheviiot/vintner/internal/wineenv"
 
 // dirKind selects which install directory a tool's real .exe lives in.
 type dirKind int

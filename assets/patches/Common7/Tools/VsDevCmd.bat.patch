@@ -1,4 +1,4 @@
-msvc-go-wine: skip VsDevCmd's telemetry upload.
+vintner: skip VsDevCmd's telemetry upload.
 
 There's no telemetry endpoint reachable (or wanted) under Wine. Rather than
 touching the conditional logic below, just set the opt-out switch the

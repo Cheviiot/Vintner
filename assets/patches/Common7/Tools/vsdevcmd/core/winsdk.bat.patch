@@ -1,4 +1,4 @@
-msvc-go-wine: find the Windows SDK/UCRT dirs on disk before trying the registry.
+vintner: find the Windows SDK/UCRT dirs on disk before trying the registry.
 
 winsdk.bat locates the Windows 10/11 SDK and Universal CRT SDK by querying
 the Windows Registry, which doesn't have real SDK installation entries

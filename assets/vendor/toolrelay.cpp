@@ -1,5 +1,5 @@
 // toolrelay.exe - a thin native launcher for a Wine-hosted MSVC tool
-// invocation, built and used by msvc-go-wine (see internal/install's
+// invocation, built and used by vintner (see internal/install's
 // buildToolRelay and internal/wrapper's runViaToolRelay).
 //
 // It exists to solve two problems that are only solvable from inside a

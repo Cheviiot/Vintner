@@ -1,4 +1,4 @@
-// Package install wires up a downloaded MSVC/WinSDK tree so the msvc-go-wine
+// Package install wires up a downloaded MSVC/WinSDK tree so the vintner
 // wrapper commands can find it: locating the installed toolchain/SDK
 // versions, fixing up header/library name casing, laying out the
 // per-architecture tool symlinks, and building the toolrelay helper.
@@ -14,16 +14,16 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/Cheviiot/msvc-go-wine/assets"
-	"github.com/Cheviiot/msvc-go-wine/internal/wineenv"
+	"github.com/Cheviiot/vintner/assets"
+	"github.com/Cheviiot/vintner/internal/wineenv"
 )
 
 var archs = []string{"x86", "x64", "arm", "arm64"}
 
 // Install wires up dest (a directory previously populated by
-// `msvc-go-wine download --dest dest`) with the tool wrapper symlinks and
+// `vintner download --dest dest`) with the tool wrapper symlinks and
 // env.json config the wrapper runtime expects. selfBinary is the path to
-// the currently running msvc-go-wine executable, copied into dest/bin so
+// the currently running vintner executable, copied into dest/bin so
 // the arch-specific tool symlinks have something to point at.
 func Install(dest, selfBinary string) error {
 	dest, err := filepath.Abs(dest)
@@ -86,7 +86,7 @@ func Install(dest, selfBinary string) error {
 
 	kits10 := filepath.Join(dest, "kits", "10")
 	if !isDir(kits10) {
-		return fmt.Errorf("%s not found - expected a Windows SDK already unpacked by `msvc-go-wine download`", kits10)
+		return fmt.Errorf("%s not found - expected a Windows SDK already unpacked by `vintner download`", kits10)
 	}
 	if err := lnS("Lib", filepath.Join(kits10, "lib")); err != nil {
 		return err
@@ -148,7 +148,7 @@ func Install(dest, selfBinary string) error {
 	if err := os.MkdirAll(destBin, 0o755); err != nil {
 		return err
 	}
-	sharedBinary := filepath.Join(destBin, "msvc-go-wine")
+	sharedBinary := filepath.Join(destBin, "vintner")
 	if err := copyFile(selfBinary, sharedBinary, 0o755); err != nil {
 		return fmt.Errorf("installing shared binary: %w", err)
 	}
@@ -288,7 +288,7 @@ func renameHostDirs(binDir string) error {
 }
 
 // setupWrapperDir creates <destBin>/<arch> with its own local copy of the
-// msvc-go-wine binary (not a symlink to the shared one in destBin), and
+// vintner binary (not a symlink to the shared one in destBin), and
 // symlinks every tool name to that LOCAL copy.
 //
 // This matters: the wrapper runtime locates its own install root via
@@ -297,23 +297,23 @@ func renameHostDirs(binDir string) error {
 // PATH-resolved absolute path as argv[0] (some just pass the bare command
 // name, e.g. "cl", which would make a naive argv[0]-based lookup resolve
 // against the caller's cwd instead of the install dir). A same-directory
-// symlink (cl -> msvc-go-wine) resolves to a binary that's still in the
-// right arch dir; a symlink to a binary one level up (cl -> ../msvc-go-wine)
+// symlink (cl -> vintner) resolves to a binary that's still in the
+// right arch dir; a symlink to a binary one level up (cl -> ../vintner)
 // would not be.
 func setupWrapperDir(destBin, selfBinary, arch, host, dotnetHost, msvcVer, sdkVer string) error {
 	archDir := filepath.Join(destBin, arch)
 	if err := os.MkdirAll(archDir, 0o755); err != nil {
 		return err
 	}
-	localBinary := filepath.Join(archDir, "msvc-go-wine")
+	localBinary := filepath.Join(archDir, "vintner")
 	if err := copyFile(selfBinary, localBinary, 0o755); err != nil {
 		return fmt.Errorf("installing per-arch binary: %w", err)
 	}
 	for name := range toolNames {
-		if err := lnS("msvc-go-wine", filepath.Join(archDir, name)); err != nil {
+		if err := lnS("vintner", filepath.Join(archDir, name)); err != nil {
 			return err
 		}
-		if err := lnS("msvc-go-wine", filepath.Join(archDir, name+".exe")); err != nil {
+		if err := lnS("vintner", filepath.Join(archDir, name+".exe")); err != nil {
 			return err
 		}
 	}

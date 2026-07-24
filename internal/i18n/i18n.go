@@ -1,4 +1,4 @@
-// Package i18n provides minimal message localization for msvc-go-wine's own
+// Package i18n provides minimal message localization for vintner's own
 // CLI chrome (usage text, progress lines, prompts). It does not localize
 // error messages bubbled up from deeper packages - those stay in English,
 // matching how most cross-platform dev tools keep diagnostic text technical
@@ -20,13 +20,13 @@ const (
 
 var current = detect()
 
-// detect picks the active language from MSVC_GO_WINE_LANG (checked first, so
+// detect picks the active language from VINTNER_LANG (checked first, so
 // it always overrides the locale), falling back to the POSIX locale
 // variables in their usual priority order (LC_ALL, LC_MESSAGES, LANG). Any
 // value starting with "ru" (case-insensitive) selects Russian; anything else
 // falls back to English.
 func detect() Lang {
-	for _, key := range []string{"MSVC_GO_WINE_LANG", "LC_ALL", "LC_MESSAGES", "LANG"} {
+	for _, key := range []string{"VINTNER_LANG", "LC_ALL", "LC_MESSAGES", "LANG"} {
 		v := os.Getenv(key)
 		if v == "" {
 			continue
@@ -65,55 +65,55 @@ func T(key string, args ...any) string {
 
 var catalog = map[string]map[Lang]string{
 	"main.usage": {
-		EN: `msvc-go-wine - cross compile with MSVC on Linux via Wine
+		EN: `vintner - cross compile with MSVC on Linux via Wine
 
 Usage:
-  msvc-go-wine download (dl) --accept-license [--dest <dir>] [options]
-                                                  fetch and unpack MSVC/WinSDK/WDK
-  msvc-go-wine install (i) [dir]                 wire up wrappers for a downloaded MSVC
-  msvc-go-wine env (e) --bin <dir/bin/arch>       print INCLUDE/LIB for native clang-cl/lld-link use
-  msvc-go-wine version (v)                       print the version
-  msvc-go-wine help (h)                          show this message
+  vintner download (dl) --accept-license [--dest <dir>] [options]
+                                        fetch and unpack MSVC/WinSDK/WDK
+  vintner install (i) [dir]            wire up wrappers for a downloaded MSVC
+  vintner env (e) --bin <dir/bin/arch> print INCLUDE/LIB for native clang-cl/lld-link use
+  vintner version (v)                  print the version
+  vintner help (h)                     show this message
 
-Run "msvc-go-wine <command> --help" for that command's own options - download
+Run "vintner <command> --help" for that command's own options - download
 has many, including --with-wdk, --list-workloads, --list-components and
 --print-deps-tree.
 
---dest/[dir] default to ~/.msvc-go-wine if omitted.
-Language: set MSVC_GO_WINE_LANG=ru (or LANG=ru_RU...) for Russian output.
+--dest/[dir] default to ~/.vintner if omitted.
+Language: set VINTNER_LANG=ru (or LANG=ru_RU...) for Russian output.
 
 Once installed, add <dir>/bin/<arch> to PATH and invoke the tools directly:
   cl, link, lib, ml, ml64, mc, midl, mt, rc, dumpbin, msbuild, nmake, armasm, armasm64, cmd, findstr
 `,
-		RU: `msvc-go-wine — кросс-компиляция настоящим MSVC на Linux через Wine
+		RU: `vintner — кросс-компиляция настоящим MSVC на Linux через Wine
 
 Использование:
-  msvc-go-wine download (dl) --accept-license [--dest <каталог>] [опции]
-                                                  скачать и распаковать MSVC/WinSDK/WDK
-  msvc-go-wine install (i) [каталог]             настроить обёртки для скачанного MSVC
-  msvc-go-wine env (e) --bin <dir/bin/arch>      вывести INCLUDE/LIB для clang-cl/lld-link напрямую
-  msvc-go-wine version (v)                       показать версию
-  msvc-go-wine help (h)                          показать эту справку
+  vintner download (dl) --accept-license [--dest <каталог>] [опции]
+                                        скачать и распаковать MSVC/WinSDK/WDK
+  vintner install (i) [каталог]        настроить обёртки для скачанного MSVC
+  vintner env (e) --bin <dir/bin/arch> вывести INCLUDE/LIB для clang-cl/lld-link напрямую
+  vintner version (v)                  показать версию
+  vintner help (h)                     показать эту справку
 
-Запустите «msvc-go-wine <команда> --help» для параметров конкретной команды —
+Запустите «vintner <команда> --help» для параметров конкретной команды —
 у download их много, включая --with-wdk, --list-workloads, --list-components
 и --print-deps-tree.
 
---dest/[каталог] по умолчанию — ~/.msvc-go-wine.
-Язык: установите MSVC_GO_WINE_LANG=en (или LANG=en_US...) для вывода на английском.
+--dest/[каталог] по умолчанию — ~/.vintner.
+Язык: установите VINTNER_LANG=en (или LANG=en_US...) для вывода на английском.
 
 После установки добавьте <dir>/bin/<arch> в PATH и вызывайте инструменты напрямую:
   cl, link, lib, ml, ml64, mc, midl, mt, rc, dumpbin, msbuild, nmake, armasm, armasm64, cmd, findstr
 `,
 	},
 	"main.unknown_subcommand": {
-		EN: "msvc-go-wine: unknown subcommand %q\n\n",
-		RU: "msvc-go-wine: неизвестная подкоманда %q\n\n",
+		EN: "vintner: unknown subcommand %q\n\n",
+		RU: "vintner: неизвестная подкоманда %q\n\n",
 	},
 
 	"install.usage": {
-		EN: "usage: msvc-go-wine install (i) [dest]  (default: ~/.msvc-go-wine)",
-		RU: "использование: msvc-go-wine install (i) [каталог]  (по умолчанию: ~/.msvc-go-wine)",
+		EN: "usage: vintner install (i) [dest]  (default: ~/.vintner)",
+		RU: "использование: vintner install (i) [каталог]  (по умолчанию: ~/.vintner)",
 	},
 	"install.default_dir": {
 		EN: "No directory given, using default: %s",
@@ -125,12 +125,12 @@ Once installed, add <dir>/bin/<arch> to PATH and invoke the tools directly:
 	},
 
 	"env.usage": {
-		EN: "usage: msvc-go-wine env (e) --bin <dest>/bin/<arch>",
-		RU: "использование: msvc-go-wine env (e) --bin <dest>/bin/<arch>",
+		EN: "usage: vintner env (e) --bin <dest>/bin/<arch>",
+		RU: "использование: vintner env (e) --bin <dest>/bin/<arch>",
 	},
 	"env.unknown_arch": {
-		EN: "msvc-go-wine env: unknown arch %q\n",
-		RU: "msvc-go-wine env: неизвестная архитектура %q\n",
+		EN: "vintner env: unknown arch %q\n",
+		RU: "vintner env: неизвестная архитектура %q\n",
 	},
 
 	"download.host_arch": {
@@ -146,8 +146,8 @@ Once installed, add <dir>/bin/<arch> to PATH and invoke the tools directly:
 		RU: "--dest не указан, используется значение по умолчанию: %s",
 	},
 	"download.done": {
-		EN: "Done. Next: msvc-go-wine install %s",
-		RU: "Готово. Далее: msvc-go-wine install %s",
+		EN: "Done. Next: vintner install %s",
+		RU: "Готово. Далее: vintner install %s",
 	},
 	"download.wdk_skip": {
 		EN: "--with-wdk: no x64/arm64 target architecture selected, skipping (no WDK package exists for x86/arm)",

@@ -1,5 +1,5 @@
 <!--
-  msvc-go-wine: make MSBuild resolve the Windows SDK / UCRT / preferred tool
+  vintner: make MSBuild resolve the Windows SDK / UCRT / preferred tool
   architecture from the VS install layout directly, since there's no
   Windows Registry under Wine for the stock .props files to query.
 

@@ -186,7 +186,7 @@ var httpClient = &http.Client{Timeout: 5 * time.Minute}
 
 func init() {
 	// --manifest points at a local file, fetched through this same client
-	// via a "file:" URL (see cmd/msvc-go-wine's runDownload) - so it needs a
+	// via a "file:" URL (see cmd/vintner's runDownload) - so it needs a
 	// registered "file" handler alongside the default http/https transport.
 	t := http.DefaultTransport.(*http.Transport).Clone()
 	t.RegisterProtocol("file", http.NewFileTransport(http.Dir("/")))

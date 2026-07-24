@@ -8,13 +8,13 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"github.com/Cheviiot/msvc-go-wine/internal/download"
-	"github.com/Cheviiot/msvc-go-wine/internal/i18n"
+	"github.com/Cheviiot/vintner/internal/download"
+	"github.com/Cheviiot/vintner/internal/i18n"
 )
 
 func runDownload(args []string) int {
 	fs := flag.NewFlagSet("download", flag.ContinueOnError)
-	dest := fs.String("dest", "", "directory to install into (default: ~/.msvc-go-wine)")
+	dest := fs.String("dest", "", "directory to install into (default: ~/.vintner)")
 	cacheDir := fs.String("cache", "", "directory to use as a persistent download cache (default: a temp dir, removed afterwards)")
 	major := fs.Int("major", 18, "the major VS version to download")
 	preview := fs.Bool("preview", false, "download the preview/insiders channel instead of release/stable")
@@ -63,7 +63,7 @@ func runDownload(args []string) int {
 	if manifestURL == "" {
 		url, err := download.FetchChannelManifest(*major, *preview)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "msvc-go-wine download:", err)
+			fmt.Fprintln(os.Stderr, "vintner download:", err)
 			return 1
 		}
 		manifestURL = url
@@ -73,7 +73,7 @@ func runDownload(args []string) int {
 
 	manifest, err := download.FetchInstallerManifest(manifestURL)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "msvc-go-wine download:", err)
+		fmt.Fprintln(os.Stderr, "vintner download:", err)
 		return 1
 	}
 
@@ -105,7 +105,7 @@ func runDownload(args []string) int {
 	}
 
 	if err := download.ResolveSelection(opts, idx); err != nil {
-		fmt.Fprintln(os.Stderr, "msvc-go-wine download:", err)
+		fmt.Fprintln(os.Stderr, "vintner download:", err)
 		return 1
 	}
 
@@ -116,7 +116,7 @@ func runDownload(args []string) int {
 
 	selected, err := download.ExpandSelection(idx, opts)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "msvc-go-wine download:", err)
+		fmt.Fprintln(os.Stderr, "vintner download:", err)
 		return 1
 	}
 	var downloadSize, installSize int64
@@ -130,9 +130,9 @@ func runDownload(args []string) int {
 	cache := *cacheDir
 	removeCache := false
 	if cache == "" {
-		tmp, err := os.MkdirTemp("", "msvc-go-wine-cache-")
+		tmp, err := os.MkdirTemp("", "vintner-cache-")
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "msvc-go-wine download:", err)
+			fmt.Fprintln(os.Stderr, "vintner download:", err)
 			return 1
 		}
 		cache = tmp
@@ -145,7 +145,7 @@ func runDownload(args []string) int {
 	if !*onlyDownload && *dest == "" {
 		def, err := defaultToolchainDir()
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "msvc-go-wine download:", err)
+			fmt.Fprintln(os.Stderr, "vintner download:", err)
 			return 1
 		}
 		*dest = def
@@ -153,7 +153,7 @@ func runDownload(args []string) int {
 	}
 
 	if err := download.FetchPayloads(selected, cache, *onlyDownload); err != nil {
-		fmt.Fprintln(os.Stderr, "msvc-go-wine download:", err)
+		fmt.Fprintln(os.Stderr, "vintner download:", err)
 		return 1
 	}
 	if *onlyDownload {
@@ -162,7 +162,7 @@ func runDownload(args []string) int {
 
 	destAbs, err := filepath.Abs(*dest)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "msvc-go-wine download:", err)
+		fmt.Fprintln(os.Stderr, "vintner download:", err)
 		return 1
 	}
 
@@ -171,7 +171,7 @@ func runDownload(args []string) int {
 		unpack = filepath.Join(destAbs, "unpack")
 	}
 	if err := download.UnpackSelectedPackages(selected, cache, unpack); err != nil {
-		fmt.Fprintln(os.Stderr, "msvc-go-wine download:", err)
+		fmt.Fprintln(os.Stderr, "vintner download:", err)
 		return 1
 	}
 
@@ -180,14 +180,14 @@ func runDownload(args []string) int {
 	for _, hostArch := range []string{"amd64", "arm64"} {
 		msbuildExe := filepath.Join(unpack, "MSBuild", "Current", "Bin", hostArch, "MSBuild.exe")
 		if err := download.CopyRedirectedAssemblies(msbuildExe); err != nil {
-			fmt.Fprintln(os.Stderr, "msvc-go-wine download:", err)
+			fmt.Fprintln(os.Stderr, "vintner download:", err)
 			return 1
 		}
 	}
 
 	if !*onlyUnpack {
 		if err := download.RelocateBuildTools(unpack, destAbs); err != nil {
-			fmt.Fprintln(os.Stderr, "msvc-go-wine download:", err)
+			fmt.Fprintln(os.Stderr, "vintner download:", err)
 			return 1
 		}
 		if !*keepUnpack {
@@ -195,7 +195,7 @@ func runDownload(args []string) int {
 		}
 		if !*skipPatch && *major == 18 {
 			if err := download.ApplyCompatibilityFixes(destAbs); err != nil {
-				fmt.Fprintln(os.Stderr, "msvc-go-wine download:", err)
+				fmt.Fprintln(os.Stderr, "vintner download:", err)
 				return 1
 			}
 		}
@@ -203,7 +203,7 @@ func runDownload(args []string) int {
 
 	if opts.WithWDK && !*onlyUnpack {
 		if err := downloadWDK(opts, selected, cache, destAbs, *major); err != nil {
-			fmt.Fprintln(os.Stderr, "msvc-go-wine download:", err)
+			fmt.Fprintln(os.Stderr, "vintner download:", err)
 			return 1
 		}
 	}

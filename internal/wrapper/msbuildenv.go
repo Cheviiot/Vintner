@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/Cheviiot/msvc-go-wine/internal/wineenv"
+	"github.com/Cheviiot/vintner/internal/wineenv"
 )
 
 var reToolsetDir = regexp.MustCompile(`^v(\d+)$`)

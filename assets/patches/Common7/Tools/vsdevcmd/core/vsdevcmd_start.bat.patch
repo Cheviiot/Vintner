@@ -1,4 +1,4 @@
-msvc-go-wine: always record the starting directory.
+vintner: always record the starting directory.
 
 vsdevcmd_start.bat only saved __VSCMD_CURRENT_DIR when the caller passed
 -startdir=none, which doesn't hold up under Wine's cmd.exe (see

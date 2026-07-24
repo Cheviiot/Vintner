@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Cheviiot/msvc-go-wine/assets"
+	"github.com/Cheviiot/vintner/assets"
 )
 
 // ApplyCompatibilityFixes applies the embedded Wine compatibility patches
@@ -63,7 +63,7 @@ func applyGitPatch(dest, embeddedPath, target string) error {
 		return err
 	}
 
-	tmp, err := os.CreateTemp("", "msvc-go-wine-*.patch")
+	tmp, err := os.CreateTemp("", "vintner-*.patch")
 	if err != nil {
 		return err
 	}

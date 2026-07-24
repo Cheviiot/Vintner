@@ -50,7 +50,7 @@ type Options struct {
 	// selection - unlike everything else it depends on, it's opt-in via
 	// --with-wdk, since the actual driver headers/libs come from a separate
 	// NuGet package download handled outside ExpandSelection entirely (see
-	// wdk.go and cmd/msvc-go-wine's runDownload).
+	// wdk.go and cmd/vintner's runDownload).
 	WithWDK bool
 }
 

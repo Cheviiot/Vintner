@@ -10,7 +10,7 @@ import (
 )
 
 // ConfigFileName is the per-architecture config dropped next to the tool
-// symlinks by `msvc-go-wine install`.
+// symlinks by `vintner install`.
 const ConfigFileName = "env.json"
 
 // Config is the per-architecture info generated at install time.

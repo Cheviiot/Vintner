@@ -1,4 +1,4 @@
-msvc-go-wine: don't hard-fail devcmd setup when the bundled CMake/Ninja is missing.
+vintner: don't hard-fail devcmd setup when the bundled CMake/Ninja is missing.
 
 Same reasoning as the ConnectionManagerExe fix: a missing optional
 component shouldn't abort the whole Developer Command Prompt setup.

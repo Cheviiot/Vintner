@@ -1,7 +1,7 @@
-// Command msvc-go-wine cross compiles with the real MSVC toolchain on Linux
+// Command vintner cross compiles with the real MSVC toolchain on Linux
 // via Wine. It's a multi-call binary that behaves as `cl`, `link`, `lib`,
 // `rc`, `midl`, `mt`, `dumpbin`, `msbuild`, etc. when invoked under one of
-// those names (via symlinks set up by `msvc-go-wine install`), and
+// those names (via symlinks set up by `vintner install`), and
 // otherwise exposes the `download`/`install`/`env`/`version` management
 // subcommands.
 package main
@@ -12,8 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Cheviiot/msvc-go-wine/internal/i18n"
-	"github.com/Cheviiot/msvc-go-wine/internal/wrapper"
+	"github.com/Cheviiot/vintner/internal/i18n"
+	"github.com/Cheviiot/vintner/internal/wrapper"
 )
 
 // version is set at build time via -ldflags "-X main.version=X.Y.Z";
@@ -48,7 +48,7 @@ func runCLI(args []string) int {
 	case "env", "e":
 		return runEnv(args[1:])
 	case "version", "v", "--version":
-		fmt.Println("msvc-go-wine " + version)
+		fmt.Println("vintner " + version)
 		return 0
 	case "-h", "--help", "help", "h":
 		printUsage()

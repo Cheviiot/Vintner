@@ -12,7 +12,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Cheviiot/msvc-go-wine/internal/wineenv"
+	"github.com/Cheviiot/vintner/internal/wineenv"
 )
 
 // pipeDrainGrace bounds how long we wait for a tool's stdout/stderr copy
@@ -24,7 +24,7 @@ import (
 // `| tail`, CI log capture) long after the actual build finished.
 const pipeDrainGrace = 500 * time.Millisecond
 
-// toolRelayName is where `msvc-go-wine install` places the compiled
+// toolRelayName is where `vintner install` places the compiled
 // toolrelay.exe helper, shared across all arch bin dirs.
 const toolRelayName = "toolrelay.exe"
 
@@ -37,7 +37,7 @@ func Run(tool string, args []string) int {
 
 	s, ok := Tools[tool]
 	if !ok {
-		fmt.Fprintf(os.Stderr, "msvc-go-wine: unknown tool %q\n", tool)
+		fmt.Fprintf(os.Stderr, "vintner: unknown tool %q\n", tool)
 		return 127
 	}
 
@@ -50,19 +50,19 @@ func Run(tool string, args []string) int {
 	// <dest>/bin/<arch>, not <dest>/bin.
 	exePath, err := os.Executable()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "msvc-go-wine:", err)
+		fmt.Fprintln(os.Stderr, "vintner:", err)
 		return 1
 	}
 	scriptDir := filepath.Dir(exePath)
 
 	cfg, err := wineenv.Load(scriptDir)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "msvc-go-wine: loading install config:", err)
+		fmt.Fprintln(os.Stderr, "vintner: loading install config:", err)
 		return 1
 	}
 	baseUnix, err := wineenv.FindBaseUnix(scriptDir)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "msvc-go-wine: locating installation root:", err)
+		fmt.Fprintln(os.Stderr, "vintner: locating installation root:", err)
 		return 1
 	}
 	paths := wineenv.NewPaths(cfg, baseUnix)
@@ -71,7 +71,7 @@ func Run(tool string, args []string) int {
 
 	wineBin, err := wineenv.FindWine()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "msvc-go-wine:", err)
+		fmt.Fprintln(os.Stderr, "vintner:", err)
 		return 1
 	}
 
@@ -119,17 +119,17 @@ func Run(tool string, args []string) int {
 // observes the real 32-bit exit code via Win32 before translating and
 // re-exiting with a value that fits in a byte.
 func runViaToolRelay(wineBin, relayExe, exePath string, args []string, paths *wineenv.Paths, stdoutF, stderrF lineFilter) int {
-	stdoutFifo := filepath.Join(os.TempDir(), fmt.Sprintf("msvc-go-wine.stdout.%d", os.Getpid()))
-	stderrFifo := filepath.Join(os.TempDir(), fmt.Sprintf("msvc-go-wine.stderr.%d", os.Getpid()))
+	stdoutFifo := filepath.Join(os.TempDir(), fmt.Sprintf("vintner.stdout.%d", os.Getpid()))
+	stderrFifo := filepath.Join(os.TempDir(), fmt.Sprintf("vintner.stderr.%d", os.Getpid()))
 	os.Remove(stdoutFifo)
 	os.Remove(stderrFifo)
 	if err := syscall.Mkfifo(stdoutFifo, 0o600); err != nil {
-		fmt.Fprintln(os.Stderr, "msvc-go-wine:", err)
+		fmt.Fprintln(os.Stderr, "vintner:", err)
 		return 1
 	}
 	defer os.Remove(stdoutFifo)
 	if err := syscall.Mkfifo(stderrFifo, 0o600); err != nil {
-		fmt.Fprintln(os.Stderr, "msvc-go-wine:", err)
+		fmt.Fprintln(os.Stderr, "vintner:", err)
 		return 1
 	}
 	defer os.Remove(stderrFifo)
@@ -144,7 +144,7 @@ func runViaToolRelay(wineBin, relayExe, exePath string, args []string, paths *wi
 	}
 
 	if err := cmd.Start(); err != nil {
-		fmt.Fprintln(os.Stderr, "msvc-go-wine:", err)
+		fmt.Fprintln(os.Stderr, "vintner:", err)
 		return 1
 	}
 
@@ -176,7 +176,7 @@ func runViaToolRelay(wineBin, relayExe, exePath string, args []string, paths *wi
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			return exitErr.ExitCode()
 		}
-		fmt.Fprintln(os.Stderr, "msvc-go-wine:", err)
+		fmt.Fprintln(os.Stderr, "vintner:", err)
 		return 1
 	}
 	return 0
@@ -191,17 +191,17 @@ func runViaToolRelay(wineBin, relayExe, exePath string, args []string, paths *wi
 func runRawStdout(cmd *exec.Cmd) int {
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "msvc-go-wine:", err)
+		fmt.Fprintln(os.Stderr, "vintner:", err)
 		return 1
 	}
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "msvc-go-wine:", err)
+		fmt.Fprintln(os.Stderr, "vintner:", err)
 		return 1
 	}
 
 	if err := cmd.Start(); err != nil {
-		fmt.Fprintln(os.Stderr, "msvc-go-wine:", err)
+		fmt.Fprintln(os.Stderr, "vintner:", err)
 		return 1
 	}
 
@@ -218,7 +218,7 @@ func runRawStdout(cmd *exec.Cmd) int {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			return exitErr.ExitCode()
 		}
-		fmt.Fprintln(os.Stderr, "msvc-go-wine:", err)
+		fmt.Fprintln(os.Stderr, "vintner:", err)
 		return 1
 	}
 	return 0
@@ -265,17 +265,17 @@ func buildEnv(p *wineenv.Paths) []string {
 func runFiltered(cmd *exec.Cmd, stdoutF, stderrF lineFilter) int {
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "msvc-go-wine:", err)
+		fmt.Fprintln(os.Stderr, "vintner:", err)
 		return 1
 	}
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "msvc-go-wine:", err)
+		fmt.Fprintln(os.Stderr, "vintner:", err)
 		return 1
 	}
 
 	if err := cmd.Start(); err != nil {
-		fmt.Fprintln(os.Stderr, "msvc-go-wine:", err)
+		fmt.Fprintln(os.Stderr, "vintner:", err)
 		return 1
 	}
 
@@ -292,7 +292,7 @@ func runFiltered(cmd *exec.Cmd, stdoutF, stderrF lineFilter) int {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			return exitErr.ExitCode()
 		}
-		fmt.Fprintln(os.Stderr, "msvc-go-wine:", err)
+		fmt.Fprintln(os.Stderr, "vintner:", err)
 		return 1
 	}
 	return 0

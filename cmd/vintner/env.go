@@ -6,17 +6,17 @@ import (
 	"os"
 	"strings"
 
-	"github.com/Cheviiot/msvc-go-wine/internal/i18n"
-	"github.com/Cheviiot/msvc-go-wine/internal/wineenv"
+	"github.com/Cheviiot/vintner/internal/i18n"
+	"github.com/Cheviiot/vintner/internal/wineenv"
 )
 
 // runEnv prints shell `export` statements for INCLUDE/LIB (converted from
 // wine's "z:\..." notation to plain unix paths) and TARGET_TRIPLE, for
 // driving clang-cl/lld-link directly without Wine.
-// Usage: eval "$(msvc-go-wine env --bin <dest>/bin/<arch>)"
+// Usage: eval "$(vintner env --bin <dest>/bin/<arch>)"
 func runEnv(args []string) int {
 	fs := flag.NewFlagSet("env", flag.ContinueOnError)
-	bin := fs.String("bin", "", "the <dest>/bin/<arch> directory produced by `msvc-go-wine install`")
+	bin := fs.String("bin", "", "the <dest>/bin/<arch> directory produced by `vintner install`")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -27,12 +27,12 @@ func runEnv(args []string) int {
 
 	cfg, err := wineenv.Load(*bin)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "msvc-go-wine env:", err)
+		fmt.Fprintln(os.Stderr, "vintner env:", err)
 		return 1
 	}
 	baseUnix, err := wineenv.FindBaseUnix(*bin)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "msvc-go-wine env:", err)
+		fmt.Fprintln(os.Stderr, "vintner env:", err)
 		return 1
 	}
 	paths := wineenv.NewPaths(cfg, baseUnix)

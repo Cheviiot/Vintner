@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/Cheviiot/msvc-go-wine/internal/i18n"
-	"github.com/Cheviiot/msvc-go-wine/internal/install"
+	"github.com/Cheviiot/vintner/internal/i18n"
+	"github.com/Cheviiot/vintner/internal/install"
 )
 
 func runInstall(args []string) int {
@@ -20,7 +20,7 @@ func runInstall(args []string) int {
 	} else {
 		def, err := defaultToolchainDir()
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "msvc-go-wine install:", err)
+			fmt.Fprintln(os.Stderr, "vintner install:", err)
 			return 1
 		}
 		dest = def
@@ -29,12 +29,12 @@ func runInstall(args []string) int {
 
 	self, err := os.Executable()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "msvc-go-wine install:", err)
+		fmt.Fprintln(os.Stderr, "vintner install:", err)
 		return 1
 	}
 
 	if err := install.Install(dest, self); err != nil {
-		fmt.Fprintln(os.Stderr, "msvc-go-wine install:", err)
+		fmt.Fprintln(os.Stderr, "vintner install:", err)
 		return 1
 	}
 	fmt.Println(i18n.T("install.done", dest+"/bin/<arch>"))
