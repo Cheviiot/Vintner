@@ -63,10 +63,13 @@ func printUsage() {
 	fmt.Fprint(os.Stderr, `msvc-go-wine - cross compile with MSVC on Linux via Wine
 
 Usage:
-  msvc-go-wine download --dest <dir> [options]   fetch and unpack MSVC/WinSDK
-  msvc-go-wine install <dir>                     wire up wrappers for a downloaded MSVC
+  msvc-go-wine download --accept-license [--dest <dir>] [options]
+                                                  fetch and unpack MSVC/WinSDK
+  msvc-go-wine install [dir]                     wire up wrappers for a downloaded MSVC
   msvc-go-wine env --bin <dir/bin/arch>           print INCLUDE/LIB for native clang-cl/lld-link use
   msvc-go-wine version                           print the version
+
+--dest/[dir] default to ~/.msvc-go-wine if omitted.
 
 Once installed, add <dir>/bin/<arch> to PATH and invoke the tools directly:
   cl, link, lib, ml, ml64, mc, midl, mt, rc, dumpbin, msbuild, nmake, armasm, armasm64, cmd, findstr

@@ -27,15 +27,16 @@ name it's invoked as (a "multi-call binary", like busybox):
 ## Quick start
 
 ```bash
-# 1. Download and unpack MSVC + Windows SDK (requires accepting Microsoft's
-#    Visual Studio Build Tools license, and msitools for unpacking .msi payloads)
-msvc-go-wine download --accept-license --dest ~/my_msvc
+# 1. Download and unpack MSVC + Windows SDK into ~/.msvc-go-wine (requires
+#    accepting Microsoft's Visual Studio Build Tools license, and msitools
+#    for unpacking .msi payloads). Pass --dest <dir> for a different location.
+msvc-go-wine download --accept-license
 
 # 2. Wire up the tool wrappers
-msvc-go-wine install ~/my_msvc
+msvc-go-wine install
 
 # 3. Add the toolchain to PATH and build
-export PATH=~/my_msvc/bin/x64:$PATH
+export PATH=~/.msvc-go-wine/bin/x64:$PATH
 cl /nologo /EHsc hello.cpp
 ```
 
@@ -55,11 +56,13 @@ pkcon install wine msitools
 ## Commands
 
 ```
-msvc-go-wine download --dest <dir> [options]   fetch and unpack MSVC/WinSDK
-msvc-go-wine install <dir>                     wire up wrappers for a downloaded MSVC
-msvc-go-wine env --bin <dir>/bin/<arch>        print INCLUDE/LIB for native clang-cl/lld-link use
-msvc-go-wine version                           print the version
+msvc-go-wine download --accept-license [--dest <dir>] [options]   fetch and unpack MSVC/WinSDK
+msvc-go-wine install [dir]                                        wire up wrappers for a downloaded MSVC
+msvc-go-wine env --bin <dir>/bin/<arch>                           print INCLUDE/LIB for native clang-cl/lld-link use
+msvc-go-wine version                                              print the version
 ```
+
+`--dest`/`[dir]` both default to `~/.msvc-go-wine` when omitted.
 
 `download` supports `--msvc-version`, `--sdk-version`, `--architecture`,
 `--host-arch`, `--with-*` component toggles, `--ignore`, `--only-download`,
@@ -73,7 +76,7 @@ You don't need Wine at all if you drive the (nonredistributable) MSVC/WinSDK
 headers and libraries with Clang/LLD in MSVC-compatible mode:
 
 ```bash
-eval "$(msvc-go-wine env --bin ~/my_msvc/bin/x64)"
+eval "$(msvc-go-wine env --bin ~/.msvc-go-wine/bin/x64)"
 clang-cl -c hello.c
 lld-link hello.obj -out:hello.exe
 ```

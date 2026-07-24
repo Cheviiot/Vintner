@@ -13,7 +13,7 @@ import (
 
 func runDownload(args []string) int {
 	fs := flag.NewFlagSet("download", flag.ContinueOnError)
-	dest := fs.String("dest", "", "directory to install into (required unless --only-download)")
+	dest := fs.String("dest", "", "directory to install into (default: ~/.msvc-go-wine)")
 	cacheDir := fs.String("cache", "", "directory to use as a persistent download cache (default: a temp dir, removed afterwards)")
 	major := fs.Int("major", 18, "the major VS version to download")
 	preview := fs.Bool("preview", false, "download the preview/insiders channel instead of release/stable")
@@ -122,8 +122,13 @@ func runDownload(args []string) int {
 	}
 
 	if !*onlyDownload && *dest == "" {
-		fmt.Fprintln(os.Stderr, "msvc-go-wine download: --dest is required unless --only-download is set")
-		return 1
+		def, err := defaultToolchainDir()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "msvc-go-wine download:", err)
+			return 1
+		}
+		*dest = def
+		fmt.Println("--dest not set, using default:", *dest)
 	}
 
 	if err := download.FetchPayloads(selected, cache, *onlyDownload); err != nil {
