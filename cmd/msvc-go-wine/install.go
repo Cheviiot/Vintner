@@ -4,12 +4,13 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/Cheviiot/msvc-go-wine/internal/i18n"
 	"github.com/Cheviiot/msvc-go-wine/internal/install"
 )
 
 func runInstall(args []string) int {
 	if len(args) > 1 || (len(args) == 1 && (args[0] == "-h" || args[0] == "--help")) {
-		fmt.Fprintln(os.Stderr, "usage: msvc-go-wine install [dest]  (default: ~/.msvc-go-wine)")
+		fmt.Fprintln(os.Stderr, i18n.T("install.usage"))
 		return 1
 	}
 
@@ -23,7 +24,7 @@ func runInstall(args []string) int {
 			return 1
 		}
 		dest = def
-		fmt.Println("No directory given, using default:", dest)
+		fmt.Println(i18n.T("install.default_dir", dest))
 	}
 
 	self, err := os.Executable()
@@ -36,6 +37,6 @@ func runInstall(args []string) int {
 		fmt.Fprintln(os.Stderr, "msvc-go-wine install:", err)
 		return 1
 	}
-	fmt.Println("Done. Add", dest+"/bin/<arch> to PATH to use cl, link, lib, ...")
+	fmt.Println(i18n.T("install.done", dest+"/bin/<arch>"))
 	return 0
 }

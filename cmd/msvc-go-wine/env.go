@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/Cheviiot/msvc-go-wine/internal/i18n"
 	"github.com/Cheviiot/msvc-go-wine/internal/wineenv"
 )
 
@@ -20,7 +21,7 @@ func runEnv(args []string) int {
 		return 2
 	}
 	if *bin == "" {
-		fmt.Fprintln(os.Stderr, "usage: msvc-go-wine env --bin <dest>/bin/<arch>")
+		fmt.Fprintln(os.Stderr, i18n.T("env.usage"))
 		return 1
 	}
 
@@ -38,7 +39,7 @@ func runEnv(args []string) int {
 
 	triple, ok := targetTriples[cfg.Arch]
 	if !ok {
-		fmt.Fprintf(os.Stderr, "msvc-go-wine env: unknown arch %q\n", cfg.Arch)
+		fmt.Fprint(os.Stderr, i18n.T("env.unknown_arch", cfg.Arch))
 		return 1
 	}
 

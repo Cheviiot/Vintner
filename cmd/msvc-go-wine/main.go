@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Cheviiot/msvc-go-wine/internal/i18n"
 	"github.com/Cheviiot/msvc-go-wine/internal/wrapper"
 )
 
@@ -40,38 +41,25 @@ func runCLI(args []string) int {
 	}
 
 	switch args[0] {
-	case "download":
+	case "download", "dl":
 		return runDownload(args[1:])
-	case "install":
+	case "install", "i":
 		return runInstall(args[1:])
-	case "env":
+	case "env", "e":
 		return runEnv(args[1:])
-	case "version":
+	case "version", "v", "--version":
 		fmt.Println("msvc-go-wine " + version)
 		return 0
-	case "-h", "--help", "help":
+	case "-h", "--help", "help", "h":
 		printUsage()
 		return 0
 	default:
-		fmt.Fprintf(os.Stderr, "msvc-go-wine: unknown subcommand %q\n\n", args[0])
+		fmt.Fprint(os.Stderr, i18n.T("main.unknown_subcommand", args[0]))
 		printUsage()
 		return 1
 	}
 }
 
 func printUsage() {
-	fmt.Fprint(os.Stderr, `msvc-go-wine - cross compile with MSVC on Linux via Wine
-
-Usage:
-  msvc-go-wine download --accept-license [--dest <dir>] [options]
-                                                  fetch and unpack MSVC/WinSDK
-  msvc-go-wine install [dir]                     wire up wrappers for a downloaded MSVC
-  msvc-go-wine env --bin <dir/bin/arch>           print INCLUDE/LIB for native clang-cl/lld-link use
-  msvc-go-wine version                           print the version
-
---dest/[dir] default to ~/.msvc-go-wine if omitted.
-
-Once installed, add <dir>/bin/<arch> to PATH and invoke the tools directly:
-  cl, link, lib, ml, ml64, mc, midl, mt, rc, dumpbin, msbuild, nmake, armasm, armasm64, cmd, findstr
-`)
+	fmt.Fprint(os.Stderr, i18n.T("main.usage"))
 }

@@ -9,6 +9,7 @@ import (
 	"runtime"
 
 	"github.com/Cheviiot/msvc-go-wine/internal/download"
+	"github.com/Cheviiot/msvc-go-wine/internal/i18n"
 )
 
 func runDownload(args []string) int {
@@ -79,16 +80,16 @@ func runDownload(args []string) int {
 	if opts.HostArch == "" {
 		opts.HostArch = detectHostArch()
 	}
-	fmt.Println("Install packages for", opts.HostArch, "host architecture")
+	fmt.Println(i18n.T("download.host_arch", opts.HostArch))
 
 	idx := download.BuildIndex(manifest, opts.HostArch, opts.Language)
 
 	if *listWorkloads || *listComponents {
 		if *listWorkloads {
-			printPackageList("Workload", download.PackagesByType(idx, "Workload"), opts.Language)
+			printPackageList("download.workloads_header", download.PackagesByType(idx, "Workload"), opts.Language)
 		}
 		if *listComponents {
-			printPackageList("Component", download.PackagesByType(idx, "Component"), opts.Language)
+			printPackageList("download.components_header", download.PackagesByType(idx, "Component"), opts.Language)
 		}
 		return 0
 	}
@@ -123,8 +124,8 @@ func runDownload(args []string) int {
 		downloadSize += p.DownloadSize()
 		installSize += p.InstalledSize()
 	}
-	fmt.Printf("Selected %d packages, for a total download size of %s, install size of %s\n",
-		len(selected), download.HumanizeBytes(downloadSize), download.HumanizeBytes(installSize))
+	fmt.Print(i18n.T("download.selected",
+		len(selected), download.HumanizeBytes(downloadSize), download.HumanizeBytes(installSize)))
 
 	cache := *cacheDir
 	removeCache := false
@@ -148,7 +149,7 @@ func runDownload(args []string) int {
 			return 1
 		}
 		*dest = def
-		fmt.Println("--dest not set, using default:", *dest)
+		fmt.Println(i18n.T("download.default_dest", *dest))
 	}
 
 	if err := download.FetchPayloads(selected, cache, *onlyDownload); err != nil {
@@ -207,7 +208,7 @@ func runDownload(args []string) int {
 		}
 	}
 
-	fmt.Println("Done. Next: msvc-go-wine install", destAbs)
+	fmt.Println(i18n.T("download.done", destAbs))
 	return 0
 }
 
@@ -226,7 +227,7 @@ func downloadWDK(opts *download.Options, selected []*download.Package, cache, de
 		}
 	}
 	if len(archs) == 0 {
-		fmt.Println("--with-wdk: no x64/arm64 target architecture selected, skipping (no WDK package exists for x86/arm)")
+		fmt.Println(i18n.T("download.wdk_skip"))
 		return nil
 	}
 	for _, arch := range archs {
@@ -238,7 +239,7 @@ func downloadWDK(opts *download.Options, selected []*download.Package, cache, de
 		if err != nil {
 			return err
 		}
-		fmt.Printf("Installed WDK (%s) %s at %s\n", arch, version, wdkDir)
+		fmt.Print(i18n.T("download.wdk_installed", arch, version, wdkDir))
 	}
 	return nil
 }
@@ -254,8 +255,9 @@ func contains(list []string, v string) bool {
 
 // printPackageList prints one line per package: its ID, and (when the
 // manifest carries one) its human-readable title in the requested language.
-func printPackageList(kind string, pkgs []*download.Package, language string) {
-	fmt.Printf("Available %ss (%d):\n", kind, len(pkgs))
+// headerKey is an i18n catalog key taking the package count as its one arg.
+func printPackageList(headerKey string, pkgs []*download.Package, language string) {
+	fmt.Print(i18n.T(headerKey, len(pkgs)))
 	for _, p := range pkgs {
 		if lr := p.Localized(language); lr != nil && lr.Title != "" {
 			fmt.Printf("  %-65s %s\n", p.ID, lr.Title)
@@ -273,7 +275,7 @@ func detectHostArch() string {
 }
 
 func promptAcceptLicense(license string) bool {
-	fmt.Printf("Do you accept the license at %s (yes/no)? ", license)
+	fmt.Print(i18n.T("download.license_prompt", license))
 	scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
 		switch scanner.Text() {
@@ -282,7 +284,7 @@ func promptAcceptLicense(license string) bool {
 		case "no":
 			return false
 		}
-		fmt.Print("Do you accept the license? Answer \"yes\" or \"no\": ")
+		fmt.Print(i18n.T("download.license_reprompt"))
 	}
 	return false
 }
