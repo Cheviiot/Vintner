@@ -48,4 +48,8 @@ jobs:
         uses: dominikh/staticcheck-action@9716614d4101e79b4340dd97b10e54d68234e431 # v1.4.1
         with:
           version: latest
-          install-go: false
+          # Staticcheck itself needs a newer Go than the 1.23 this repo
+          # targets (go.mod's floor) - let the action install its own,
+          # separate from the "Set up Go" step above. min-go-version
+          # defaults to reading go.mod, so diagnostics still target 1.23.
+          install-go: true
