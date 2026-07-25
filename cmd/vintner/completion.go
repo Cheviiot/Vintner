@@ -1,6 +1,11 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+
+	"github.com/Cheviiot/vintner/internal/wrapper"
+)
 
 // runCompletion prints a shell completion script for shell ("bash" or
 // "zsh") to stdout, meant to be sourced directly:
@@ -11,6 +16,11 @@ import "fmt"
 // The flag lists below are hand-maintained alongside download.go/env.go's
 // flag.FlagSet definitions rather than generated from them - there's no
 // reflection-friendly registry to walk, and the flag set rarely changes.
+// The tool name list isn't hand-maintained, though (see wrapper.ToolNames):
+// a hand-copied one already went stale once already for a flag
+// (--with-dxsdk missing from here after being added to download.go), and a
+// list of every wrapped tool has more entries and changes for the same
+// reasons the flag lists do, so it's worth generating for real.
 func runCompletion(args []string) int {
 	if len(args) != 1 {
 		fmt.Println("usage: vintner completion bash|zsh")
@@ -18,10 +28,10 @@ func runCompletion(args []string) int {
 	}
 	switch args[0] {
 	case "bash":
-		fmt.Print(bashCompletionScript)
+		fmt.Print(bashCompletionScript())
 		return 0
 	case "zsh":
-		fmt.Print(zshCompletionScript)
+		fmt.Print(zshCompletionScript())
 		return 0
 	default:
 		fmt.Printf("vintner completion: unsupported shell %q (want bash or zsh)\n", args[0])
@@ -33,9 +43,16 @@ const downloadFlags = "--dest --cache --major --preview --manifest --accept-lice
 	"--msvc-version --sdk-version --host-arch --only-host --language " +
 	"--include-optional --skip-recommended --only-download --only-unpack " +
 	"--keep-unpack --skip-patch --list-workloads --list-components " +
-	"--print-deps-tree --with-wdk --architecture --ignore -h --help"
+	"--print-deps-tree --with-wdk --with-dxsdk --architecture --ignore -h --help"
 
-var bashCompletionScript = `# vintner bash completion - eval "$(vintner completion bash)"
+// subcommandNames lists vintner's own management subcommands (long form
+// plus every short alias) - unlike the wrapped-tool names, these really are
+// fixed enough to hand-maintain: adding one is rare and always touches
+// main.go's dispatch switch right next to this file anyway.
+const subcommandNames = "download dl install i env e version v help h completion"
+
+func bashCompletionScript() string {
+	return `# vintner bash completion - eval "$(vintner completion bash)"
 _vintner_complete() {
     local cur cmd
     COMPREPLY=()
@@ -43,7 +60,7 @@ _vintner_complete() {
     cmd="${COMP_WORDS[1]}"
 
     if [ "$COMP_CWORD" -eq 1 ]; then
-        COMPREPLY=($(compgen -W "download dl install i env e version v help h completion" -- "$cur"))
+        COMPREPLY=($(compgen -W "` + subcommandNames + ` ` + strings.Join(wrapper.ToolNames(), " ") + `" -- "$cur"))
         return 0
     fi
 
@@ -65,8 +82,15 @@ _vintner_complete() {
 }
 complete -F _vintner_complete vintner
 `
+}
 
-var zshCompletionScript = `#compdef vintner
+func zshCompletionScript() string {
+	var toolEntries strings.Builder
+	for _, name := range wrapper.ToolNames() {
+		fmt.Fprintf(&toolEntries, "        %q\n", name+":run this tool directly, e.g. \"vintner "+name+" ...\"")
+	}
+
+	return `#compdef vintner
 # vintner zsh completion - source <(vintner completion zsh)
 
 _vintner() {
@@ -83,7 +107,7 @@ _vintner() {
         'help:print usage'
         'h:alias for help'
         'completion:print a shell completion script'
-    )
+` + toolEntries.String() + `    )
 
     if (( CURRENT == 2 )); then
         _describe 'command' subcommands
@@ -115,6 +139,7 @@ _vintner() {
                 '--list-components[list available components and exit]'
                 '--print-deps-tree[print the dependency tree and exit]'
                 '--with-wdk[also fetch the Windows Driver Kit]'
+                '--with-dxsdk[also fetch the DirectX SDK]'
                 '--architecture[target architecture]:arch:(x86 x64 arm arm64 host)'
                 '--ignore[package id to skip]:package id:'
                 '-h[show help]'
@@ -138,3 +163,4 @@ _vintner() {
 
 _vintner "$@"
 `
+}

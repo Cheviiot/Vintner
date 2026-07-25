@@ -1,9 +1,9 @@
 // Command vintner cross compiles with the real MSVC toolchain on Linux
 // via Wine. It's a multi-call binary that behaves as `cl`, `link`, `lib`,
 // `rc`, `midl`, `mt`, `dumpbin`, `msbuild`, etc. when invoked under one of
-// those names (via symlinks set up by `vintner install`), and
-// otherwise exposes the `download`/`install`/`env`/`version` management
-// subcommands.
+// those names (via symlinks set up by `vintner install`) or as
+// `vintner <tool> ...` directly (see runTool), and otherwise exposes the
+// `download`/`install`/`env`/`version` management subcommands.
 package main
 
 import (
@@ -24,11 +24,8 @@ func main() {
 	base := filepath.Base(os.Args[0])
 	name := strings.TrimSuffix(strings.ToLower(base), ".exe")
 
-	if _, ok := wrapper.Tools[name]; ok {
-		os.Exit(wrapper.Run(name, os.Args[1:]))
-	}
-	if name == "cmd" || name == "findstr" {
-		os.Exit(wrapper.Run(name, os.Args[1:]))
+	if wrapper.IsTool(name) {
+		os.Exit(wrapper.Run(name, os.Args[1:], ""))
 	}
 
 	os.Exit(runCLI(os.Args[1:]))
@@ -38,6 +35,10 @@ func runCLI(args []string) int {
 	if len(args) == 0 {
 		printUsage()
 		return 1
+	}
+
+	if wrapper.IsTool(args[0]) {
+		return runTool(args[0], args[1:])
 	}
 
 	switch args[0] {

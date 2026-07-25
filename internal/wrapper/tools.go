@@ -4,7 +4,11 @@
 // filtering its output.
 package wrapper
 
-import "github.com/Cheviiot/vintner/internal/wineenv"
+import (
+	"sort"
+
+	"github.com/Cheviiot/vintner/internal/wineenv"
+)
 
 // dirKind selects which install directory a tool's real .exe lives in.
 type dirKind int
@@ -45,6 +49,32 @@ var Tools = map[string]spec{
 
 // nativeTools are handled entirely without Wine.
 var nativeTools = map[string]bool{"cmd": true, "findstr": true}
+
+// IsTool reports whether name is a recognized wrapped tool - either a
+// Wine-hosted one in Tools or a native shim in nativeTools. Shared between
+// the ordinary multi-call dispatch (invoked *as* one of these names via a
+// same-directory symlink) and `vintner <tool> ...` direct dispatch, so both
+// recognize exactly the same set of names.
+func IsTool(name string) bool {
+	_, ok := Tools[name]
+	return ok || nativeTools[name]
+}
+
+// ToolNames returns every recognized tool name, sorted - Tools and
+// nativeTools combined. Used to generate shell completion without a
+// separate hand-maintained list that could drift from the real set (as
+// happened once already with a stale --with-dxsdk completion entry).
+func ToolNames() []string {
+	names := make([]string, 0, len(Tools)+len(nativeTools))
+	for name := range Tools {
+		names = append(names, name)
+	}
+	for name := range nativeTools {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
 
 func (s spec) exeDir(p *wineenv.Paths) string {
 	switch s.dir {

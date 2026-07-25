@@ -84,7 +84,10 @@ has many, including --with-wdk, --with-dxsdk, --list-workloads,
 Language: set VINTNER_LANG=ru (or LANG=ru_RU...) for Russian output.
 Completion: source <(vintner completion bash)  # or zsh
 
-Once installed, add <dir>/bin/<arch> to PATH and invoke the tools directly:
+Once installed, add <dir>/bin/<arch> to PATH and invoke the tools directly,
+or skip PATH and run them through vintner itself - "vintner cl ...",
+"vintner msbuild ...", etc. (set VINTNER_BIN to a <dir>/bin/<arch> if it's
+not the default ~/.vintner/bin/<host-arch>):
   cl, link, lib, ml, ml64, mc, midl, mt, rc, dumpbin, msbuild, nmake, armasm, armasm64, cmd, findstr
 `,
 		RU: `vintner — кросс-компиляция настоящим MSVC на Linux через Wine
@@ -104,9 +107,13 @@ Once installed, add <dir>/bin/<arch> to PATH and invoke the tools directly:
 
 --dest/[каталог] по умолчанию — ~/.vintner.
 Язык: установите VINTNER_LANG=en (или LANG=en_US...) для вывода на английском.
+Можно не трогать PATH: "vintner cl ...", "vintner msbuild ..." и т.д. работают
+напрямую (VINTNER_BIN — если каталог не стандартный ~/.vintner/bin/<hostarch>).
 Автодополнение: source <(vintner completion bash)  # или zsh
 
-После установки добавьте <dir>/bin/<arch> в PATH и вызывайте инструменты напрямую:
+После установки добавьте <dir>/bin/<arch> в PATH и вызывайте инструменты
+напрямую, либо не трогая PATH — «vintner cl ...», «vintner msbuild ...»
+и т.д.:
   cl, link, lib, ml, ml64, mc, midl, mt, rc, dumpbin, msbuild, nmake, armasm, armasm64, cmd, findstr
 `,
 	},
@@ -124,8 +131,8 @@ Once installed, add <dir>/bin/<arch> to PATH and invoke the tools directly:
 		RU: "Каталог не указан, используется значение по умолчанию: %s",
 	},
 	"install.done": {
-		EN: "Done. Add %s to PATH to use cl, link, lib, ...",
-		RU: "Готово. Добавьте %s в PATH, чтобы использовать cl, link, lib и т.д.",
+		EN: "Done. Add %s to PATH to use cl, link, lib, ... directly, or run them as \"vintner cl\", \"vintner link\", etc. without touching PATH.",
+		RU: "Готово. Добавьте %s в PATH, чтобы использовать cl, link, lib и т.д. напрямую, либо запускайте их как «vintner cl», «vintner link» и т.д., не трогая PATH.",
 	},
 
 	"env.usage": {

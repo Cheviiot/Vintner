@@ -21,6 +21,7 @@ approach: download the real MSVC/WinSDK, wrap the compiler under Wine.
 - [Installation](#installation)
 - [Quick start](#quick-start)
 - [Commands](#commands)
+- [Invoking tools without PATH](#invoking-tools-without-path)
 - [Building drivers (WDK)](#building-drivers-wdk)
 - [Building against D3DX9 (DirectX SDK)](#building-against-d3dx9-directx-sdk)
 - [Automated/scripted builds](#automatedscripted-builds)
@@ -102,6 +103,9 @@ export PATH=~/.vintner/bin/x64:$PATH
 cl /nologo /EHsc hello.cpp
 ```
 
+Don't want to touch PATH? Skip step 3 and run tools through vintner
+directly instead - see [Invoking tools without PATH](#invoking-tools-without-path).
+
 ## Commands
 
 ```
@@ -131,6 +135,24 @@ without downloading anything. Useful for finding what to pass as a bare
 package id or through `--with-*`. `--print-deps-tree` prints the
 dependency tree of whatever would actually be selected — honoring every
 other flag — without downloading anything.
+
+## Invoking tools without PATH
+
+`cl`, `link`, `msbuild`, and the rest also work as `vintner <tool>
+[args...]`, with no need to add `<dest>/bin/<arch>` to `PATH` or rely on
+the symlinks `install` sets up there:
+
+```bash
+vintner cl /nologo /EHsc hello.cpp
+vintner msbuild MyProject.sln
+```
+
+Resolves the toolchain to use from `VINTNER_BIN` if set (same meaning as
+`env --bin`: point it at a `<dest>/bin/<arch>` directory directly — useful
+for a non-default `--dest`, or to pick a specific architecture when more
+than one is installed), otherwise defaults to
+`~/.vintner/bin/<host-arch>`, the layout a plain `vintner download &&
+vintner install` with no `--dest` override produces.
 
 ## Building drivers (WDK)
 

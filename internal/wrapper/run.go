@@ -30,7 +30,15 @@ const toolRelayName = "toolrelay.exe"
 
 // Run executes the named multi-call tool with args, exactly as the original
 // bash wrappers would, and returns the process exit code.
-func Run(tool string, args []string) int {
+//
+// binDir is the <dest>/bin/<arch> directory holding env.json for this
+// invocation. Pass "" for the ordinary multi-call case (invoked as `cl`,
+// `link`, etc. via a same-directory symlink) to have it resolved from the
+// running binary's own location; a non-empty value is for `vintner <tool>
+// ...` direct dispatch (see cmd/vintner's runTool), which isn't running
+// from inside any particular <dest>/bin/<arch> and so has nothing to
+// resolve on its own.
+func Run(tool string, args []string, binDir string) int {
 	if nativeTools[tool] {
 		return runNative(tool, args)
 	}
@@ -41,19 +49,23 @@ func Run(tool string, args []string) int {
 		return 127
 	}
 
-	// os.Executable() (backed by /proc/self/exe on Linux) fully resolves
-	// symlinks, unlike os.Args[0]: not every shell passes a PATH-resolved
-	// absolute path as argv[0] (some just pass the bare command name), which
-	// would make an argv[0]-based lookup resolve against the caller's cwd
-	// instead of the actual install dir. `install` sets each arch dir up
-	// with its own local copy of the binary precisely so this resolves to
-	// <dest>/bin/<arch>, not <dest>/bin.
-	exePath, err := os.Executable()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "vintner:", err)
-		return 1
+	scriptDir := binDir
+	if scriptDir == "" {
+		// os.Executable() (backed by /proc/self/exe on Linux) fully resolves
+		// symlinks, unlike os.Args[0]: not every shell passes a
+		// PATH-resolved absolute path as argv[0] (some just pass the bare
+		// command name), which would make an argv[0]-based lookup resolve
+		// against the caller's cwd instead of the actual install dir.
+		// `install` sets each arch dir up with its own local copy of the
+		// binary precisely so this resolves to <dest>/bin/<arch>, not
+		// <dest>/bin.
+		exePath, err := os.Executable()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "vintner:", err)
+			return 1
+		}
+		scriptDir = filepath.Dir(exePath)
 	}
-	scriptDir := filepath.Dir(exePath)
 
 	cfg, err := wineenv.Load(scriptDir)
 	if err != nil {

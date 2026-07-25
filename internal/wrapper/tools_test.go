@@ -43,3 +43,21 @@ func TestEveryToolHasAnExeName(t *testing.T) {
 		}
 	}
 }
+
+func TestIsTool(t *testing.T) {
+	for name := range Tools {
+		if !IsTool(name) {
+			t.Errorf("IsTool(%q) = false, want true (it's in Tools)", name)
+		}
+	}
+	for name := range nativeTools {
+		if !IsTool(name) {
+			t.Errorf("IsTool(%q) = false, want true (it's in nativeTools)", name)
+		}
+	}
+	for _, name := range []string{"download", "install", "env", "version", "help", "completion", "frobnicate", ""} {
+		if IsTool(name) {
+			t.Errorf("IsTool(%q) = true, want false", name)
+		}
+	}
+}
