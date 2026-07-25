@@ -10,6 +10,7 @@ import (
 
 	"github.com/Cheviiot/vintner/internal/download"
 	"github.com/Cheviiot/vintner/internal/i18n"
+	"github.com/Cheviiot/vintner/internal/lock"
 )
 
 func runDownload(args []string) int {
@@ -177,6 +178,12 @@ func runDownload(args []string) int {
 		fmt.Fprintln(os.Stderr, "vintner download:", err)
 		return 1
 	}
+	unlock, err := lock.Acquire(destAbs)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "vintner download:", err)
+		return 1
+	}
+	defer unlock()
 
 	unpack := destAbs
 	if !*onlyUnpack {

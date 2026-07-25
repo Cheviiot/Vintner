@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/Cheviiot/vintner/assets"
+	"github.com/Cheviiot/vintner/internal/lock"
 	"github.com/Cheviiot/vintner/internal/wineenv"
 )
 
@@ -33,6 +34,12 @@ func Install(dest, selfBinary string) error {
 	if fi, err := os.Stat(dest); err != nil || !fi.IsDir() {
 		return fmt.Errorf("destination %q is not a directory", dest)
 	}
+
+	unlock, err := lock.Acquire(dest)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 
 	// Targets are relative so the whole installed tree stays relocatable -
 	// moving or renaming dest doesn't break these symlinks the way an
