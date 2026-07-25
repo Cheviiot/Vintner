@@ -1,6 +1,7 @@
 package wrapper
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 )
@@ -25,17 +26,21 @@ func execInherit(args []string) int {
 	if len(args) == 0 {
 		return 0
 	}
-	cmd := exec.Command(args[0], args[1:]...)
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	setNewProcessGroup(cmd)
-	if err := cmd.Start(); err != nil {
+	tc, cleanup := newToolCommand(args[0], args[1:]...)
+	defer cleanup()
+	tc.Stdin = os.Stdin
+	tc.Stdout = os.Stdout
+	tc.Stderr = os.Stderr
+	if err := tc.Start(); err != nil {
 		return 127
 	}
-	stopSignals := forwardSignals(cmd.Process)
+	stopSignals := forwardSignals(tc.Process)
 	defer stopSignals()
-	if err := cmd.Wait(); err != nil {
+	if err := tc.Wait(); err != nil {
+		if tc.timedOut() {
+			fmt.Fprintln(os.Stderr, tc.timeoutMessage())
+			return 124
+		}
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			return exitErr.ExitCode()
 		}

@@ -198,3 +198,25 @@ func TestMsbuildEnvPreferredToolArchitecture(t *testing.T) {
 		t.Errorf(`with DotnetHost=arm64, PreferredToolArchitecture = %q, want unset`, env["PreferredToolArchitecture"])
 	}
 }
+
+func TestMsbuildNodeReuseArgsForcesOffByDefault(t *testing.T) {
+	got := msbuildNodeReuseArgs([]string{"Foo.sln", "/p:Configuration=Release"})
+	want := []string{"/nodeReuse:false"}
+	if len(got) != 1 || got[0] != want[0] {
+		t.Errorf("msbuildNodeReuseArgs(...) = %v, want %v", got, want)
+	}
+}
+
+func TestMsbuildNodeReuseArgsRespectsExplicitOverride(t *testing.T) {
+	for _, explicit := range []string{
+		"/nodeReuse:true",
+		"-nodeReuse:true",
+		"/nr:true",
+		"/NODEREUSE:FALSE", // caller explicitly wanting it off too - still shouldn't double up
+	} {
+		got := msbuildNodeReuseArgs([]string{"Foo.sln", explicit})
+		if got != nil {
+			t.Errorf("msbuildNodeReuseArgs with explicit %q = %v, want nil (left alone)", explicit, got)
+		}
+	}
+}

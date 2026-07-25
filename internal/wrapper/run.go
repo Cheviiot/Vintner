@@ -84,27 +84,29 @@ func Run(tool string, args []string) int {
 		// read as-is), and add the extra environment MSBuild's own
 		// toolset/SDK-detection props need on top of the generic
 		// INCLUDE/LIB/WINEPATH, plus any global properties a project file
-		// itself could otherwise override (see msbuildGlobalArgs).
+		// itself could otherwise override (see msbuildGlobalArgs) and a
+		// forced /nodeReuse:false (see msbuildNodeReuseArgs).
 		msArgs := append(msbuildGlobalArgs(cfg, rewritten), rewritten...)
-		cmd := exec.Command(wineBin, append([]string{toolExePath}, msArgs...)...)
+		msArgs = append(msbuildNodeReuseArgs(rewritten), msArgs...)
+		tc, cleanup := newToolCommand(wineBin, append([]string{toolExePath}, msArgs...)...)
+		defer cleanup()
 		env := buildEnv(paths)
 		for k, v := range msbuildEnv(cfg, paths) {
 			env = append(env, k+"="+v)
 		}
-		cmd.Env = env
-		cmd.Stdin = os.Stdin
-		setNewProcessGroup(cmd)
-		exitCode = runRawStdout(cmd)
+		tc.Env = env
+		tc.Stdin = os.Stdin
+		exitCode = runRawStdout(tc)
 	default:
 		relay := filepath.Join(paths.BaseUnix, "bin", toolRelayName)
 		if fi, err := os.Stat(relay); err == nil && !fi.IsDir() {
 			exitCode = runViaToolRelay(wineBin, relay, toolExePath, rewritten, paths, s.stdoutFilter, s.stderrFilter)
 		} else {
-			cmd := exec.Command(wineBin, append([]string{toolExePath}, rewritten...)...)
-			cmd.Env = buildEnv(paths)
-			cmd.Stdin = os.Stdin
-			setNewProcessGroup(cmd)
-			exitCode = runFiltered(cmd, s.stdoutFilter, s.stderrFilter)
+			tc, cleanup := newToolCommand(wineBin, append([]string{toolExePath}, rewritten...)...)
+			defer cleanup()
+			tc.Env = buildEnv(paths)
+			tc.Stdin = os.Stdin
+			exitCode = runFiltered(tc, s.stdoutFilter, s.stderrFilter)
 		}
 	}
 
@@ -139,20 +141,20 @@ func runViaToolRelay(wineBin, relayExe, exePath string, args []string, paths *wi
 	defer os.Remove(stderrFifo)
 
 	cmdArgs := append([]string{relayExe, exePath}, args...)
-	cmd := exec.Command(wineBin, cmdArgs...)
-	cmd.Env = append(buildEnv(paths), "MSVCGOWINE_STDOUT="+stdoutFifo, "MSVCGOWINE_STDERR="+stderrFifo)
-	setNewProcessGroup(cmd)
+	tc, cleanup := newToolCommand(wineBin, cmdArgs...)
+	defer cleanup()
+	tc.Env = append(buildEnv(paths), "MSVCGOWINE_STDOUT="+stdoutFifo, "MSVCGOWINE_STDERR="+stderrFifo)
 	if devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0); err == nil {
 		defer devNull.Close()
-		cmd.Stdout = devNull
-		cmd.Stderr = devNull
+		tc.Stdout = devNull
+		tc.Stderr = devNull
 	}
 
-	if err := cmd.Start(); err != nil {
+	if err := tc.Start(); err != nil {
 		fmt.Fprintln(os.Stderr, "vintner:", err)
 		return 1
 	}
-	stopSignals := forwardSignals(cmd.Process)
+	stopSignals := forwardSignals(tc.Process)
 	defer stopSignals()
 
 	var wg sync.WaitGroup
@@ -176,10 +178,14 @@ func runViaToolRelay(wineBin, relayExe, exePath string, args []string, paths *wi
 		pumpLines(f, os.Stderr, stderrF)
 	}()
 
-	err := cmd.Wait()
+	err := tc.Wait()
 	wg.Wait()
 
 	if err != nil {
+		if tc.timedOut() {
+			fmt.Fprintln(os.Stderr, tc.timeoutMessage())
+			return 124
+		}
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			return exitErr.ExitCode()
 		}
@@ -195,23 +201,23 @@ func runViaToolRelay(wineBin, relayExe, exePath string, args []string, paths *wi
 // own copy goroutines - not the caller's terminal or pipe - are exposed to
 // Wine's background processes holding those descriptors open; see
 // pipeDrainGrace.
-func runRawStdout(cmd *exec.Cmd) int {
-	stdout, err := cmd.StdoutPipe()
+func runRawStdout(tc *toolCommand) int {
+	stdout, err := tc.StdoutPipe()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "vintner:", err)
 		return 1
 	}
-	stderr, err := cmd.StderrPipe()
+	stderr, err := tc.StderrPipe()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "vintner:", err)
 		return 1
 	}
 
-	if err := cmd.Start(); err != nil {
+	if err := tc.Start(); err != nil {
 		fmt.Fprintln(os.Stderr, "vintner:", err)
 		return 1
 	}
-	stopSignals := forwardSignals(cmd.Process)
+	stopSignals := forwardSignals(tc.Process)
 	defer stopSignals()
 
 	doneOut := make(chan struct{})
@@ -219,11 +225,15 @@ func runRawStdout(cmd *exec.Cmd) int {
 	go func() { io.Copy(os.Stdout, stdout); close(doneOut) }()
 	go func() { io.Copy(os.Stderr, stderr); close(doneErr) }()
 
-	err = cmd.Wait()
+	err = tc.Wait()
 	drain(doneOut)
 	drain(doneErr)
 
 	if err != nil {
+		if tc.timedOut() {
+			fmt.Fprintln(os.Stderr, tc.timeoutMessage())
+			return 124
+		}
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			return exitErr.ExitCode()
 		}
@@ -271,23 +281,23 @@ func buildEnv(p *wineenv.Paths) []string {
 
 // runFiltered streams stdout/stderr line by line through the tool's
 // filters (CR-stripping always applied first), then waits for completion.
-func runFiltered(cmd *exec.Cmd, stdoutF, stderrF lineFilter) int {
-	stdout, err := cmd.StdoutPipe()
+func runFiltered(tc *toolCommand, stdoutF, stderrF lineFilter) int {
+	stdout, err := tc.StdoutPipe()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "vintner:", err)
 		return 1
 	}
-	stderr, err := cmd.StderrPipe()
+	stderr, err := tc.StderrPipe()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "vintner:", err)
 		return 1
 	}
 
-	if err := cmd.Start(); err != nil {
+	if err := tc.Start(); err != nil {
 		fmt.Fprintln(os.Stderr, "vintner:", err)
 		return 1
 	}
-	stopSignals := forwardSignals(cmd.Process)
+	stopSignals := forwardSignals(tc.Process)
 	defer stopSignals()
 
 	doneOut := make(chan struct{})
@@ -295,11 +305,15 @@ func runFiltered(cmd *exec.Cmd, stdoutF, stderrF lineFilter) int {
 	go func() { pumpLines(stdout, os.Stdout, stdoutF); close(doneOut) }()
 	go func() { pumpLines(stderr, os.Stderr, stderrF); close(doneErr) }()
 
-	err = cmd.Wait()
+	err = tc.Wait()
 	drain(doneOut)
 	drain(doneErr)
 
 	if err != nil {
+		if tc.timedOut() {
+			fmt.Fprintln(os.Stderr, tc.timeoutMessage())
+			return 124
+		}
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			return exitErr.ExitCode()
 		}

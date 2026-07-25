@@ -218,6 +218,39 @@ func msbuildGlobalArgs(cfg *wineenv.Config, args []string) []string {
 	return out
 }
 
+var reNodeReuse = regexp.MustCompile(`(?i)^[-/](nodereuse|nr):`)
+
+// msbuildNodeReuseArgs returns ["/nodeReuse:false"] unless args already pins
+// node reuse one way or the other.
+//
+// MSBuild's node-reuse worker processes (its own /nodeReuse:true default)
+// don't behave like a normal child process here: they're meant to outlive
+// the parent msbuild.exe invocation that spawned them, waiting around under
+// Wine for the *next* msbuild call to reuse them - so nothing about
+// vintner's own process-lifetime handling (see signals.go) touches them,
+// and there's no parent process left to notice if one wedges. If a build is
+// interrupted (Ctrl-C, a killed session, a crashed Wine transport) mid-
+// compile, the worker can be left holding a half-open pipe/mutex,
+// permanently deadlocked rather than exited - confirmed in practice: a
+// stale reused node kept throwing an unrelated-looking
+// `System.TypeLoadException` on Microsoft.VisualStudio.Telemetry on every
+// subsequent build, for hours, until it was killed by hand and the next
+// build got a fresh node. Forcing node reuse off means every invocation
+// gets a clean process, so a wedged one can never poison a later,
+// unrelated build - at the cost of the couple-hundred-ms/node startup time
+// node reuse exists to save. Callers who deliberately want reuse (e.g.
+// running many builds back to back and are prepared to clean up wedged
+// nodes themselves) can still pass their own /nodeReuse or /nr switch to
+// override this.
+func msbuildNodeReuseArgs(args []string) []string {
+	for _, a := range args {
+		if reNodeReuse.MatchString(a) {
+			return nil
+		}
+	}
+	return []string{"/nodeReuse:false"}
+}
+
 func msbuildPlatform(arch string) string {
 	switch arch {
 	case "x86":

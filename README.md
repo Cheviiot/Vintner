@@ -23,6 +23,7 @@ approach: download the real MSVC/WinSDK, wrap the compiler under Wine.
 - [Commands](#commands)
 - [Building drivers (WDK)](#building-drivers-wdk)
 - [Building against D3DX9 (DirectX SDK)](#building-against-d3dx9-directx-sdk)
+- [Automated/scripted builds](#automatedscripted-builds)
 - [Language](#language)
 - [Shell completion](#shell-completion)
 - [Using clang-cl/lld-link instead of Wine](#using-clang-cllld-link-instead-of-wine)
@@ -163,6 +164,26 @@ Point your project's `IncludePath`/`LibraryPath` at
 `<dest>/DXSDK/Include` and `<dest>/DXSDK/Lib/x86` or `<dest>/DXSDK/Lib/x64`.
 Requires `cabextract` on `PATH` (the installer is a self-extracting CAB
 archive).
+
+## Automated/scripted builds
+
+Every tool invocation runs unbounded by default, same as the real thing on
+Windows. Set `VINTNER_TIMEOUT` (a `time.ParseDuration` string, e.g. `30m`,
+`2h`) to have vintner kill and fail a build that runs longer than that
+instead of hanging forever - meant for CI and other unattended callers, not
+interactive use. This guards against one confirmed failure mode: an
+MSBuild node-reuse worker (`/nodeReuse:true` is MSBuild's own default) can
+survive its parent process under Wine and, if a prior build was
+interrupted mid-compile, come back wedged - reused by the next `msbuild`
+call and failing every subsequent build with a confusing, unrelated-looking
+error, indefinitely, until it's killed by hand. vintner already forces
+`/nodeReuse:false` on every `msbuild` invocation to prevent this in the
+first place; `VINTNER_TIMEOUT` is the backstop for whatever else might
+wedge under Wine that isn't MSBuild-specific.
+
+```bash
+VINTNER_TIMEOUT=30m msbuild MyProject.sln
+```
 
 ## Language
 
