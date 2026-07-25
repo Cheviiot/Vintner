@@ -76,11 +76,13 @@ as package dependencies.
 - `msitools` (`msiextract`) — unpacks the `.msi` payloads MSVC/WinSDK ship as.
 - `git` — applies the compatibility patches bundled with `download` (see
   [Compatibility patches](#compatibility-patches)).
+- `cabextract` — only needed for `download --with-dxsdk` (see
+  [Building against D3DX9](#building-against-d3dx9-directx-sdk)).
 
 On ALT Linux:
 
 ```bash
-pkcon install wine msitools git
+pkcon install wine msitools git cabextract
 ```
 
 ## Quick start
