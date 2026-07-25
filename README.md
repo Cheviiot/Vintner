@@ -4,16 +4,15 @@
 [![Release](https://img.shields.io/github/v/release/Cheviiot/vintner)](https://github.com/Cheviiot/vintner/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.txt)
 
-**vintner** cross compiles with the real MSVC toolchain on Linux, using Wine —
-a single Go binary, inspired by [mstorsjo/msvc-wine](https://github.com/mstorsjo/msvc-wine)'s
-approach (download the actual MSVC/WinSDK, wrap the compiler under Wine) and
-implemented independently.
-
-Once installed, you invoke the real Microsoft toolchain exactly like on
-Windows: `cl`, `link`, `lib`, `rc`, `midl`, `mc`, `mt`, `dumpbin`, `msbuild`,
-`nmake`, `ml`, `ml64`, `armasm`, `armasm64`, plus trivial `cmd`/`findstr`
-shims, all work from your `PATH` — including full MSBuild projects and, with
+vintner cross-compiles with the real MSVC toolchain on Linux, using Wine.
+One Go binary drops in as `cl`, `link`, `lib`, `rc`, `midl`, `mc`, `mt`,
+`dumpbin`, `msbuild`, `nmake`, `ml`, `ml64`, `armasm`, `armasm64`, plus
+`cmd`/`findstr` shims, so once installed you invoke the real Microsoft
+tools exactly like on Windows. It handles full MSBuild projects, and with
 `--with-wdk`, real KMDF/UMDF Windows drivers.
+
+Inspired by [mstorsjo/msvc-wine](https://github.com/mstorsjo/msvc-wine)'s
+approach: download the real MSVC/WinSDK, wrap the compiler under Wine.
 
 ## Contents
 
@@ -25,35 +24,37 @@ shims, all work from your `PATH` — including full MSBuild projects and, with
 - [Language](#language)
 - [Shell completion](#shell-completion)
 - [Using clang-cl/lld-link instead of Wine](#using-clang-cllld-link-instead-of-wine)
+- [toolrelay.exe](#toolrelayexe)
+- [Compatibility patches](#compatibility-patches)
 - [Building from source](#building-from-source)
-- [How the pieces fit together](#how-the-pieces-fit-together)
 - [License](#license)
 
 ## How it works
 
-`vintner` is one Go binary that behaves differently depending on the name
-it's invoked as (a "multi-call binary", like busybox):
+vintner is a multi-call binary, like busybox: it behaves differently
+depending on the name it's invoked as.
 
-- Invoked as `cl`, `link`, `lib`, ... → it loads a small per-architecture
-  `env.json`, builds the `INCLUDE`/`LIB`/`WINEPATH` environment Wine needs,
-  rewrites absolute unix paths in the arguments into Wine's `z:\...` form
-  (working around [a Wine/cl.exe include-path bug](https://bugs.winehq.org/show_bug.cgi?id=55200)),
-  runs the real `.exe` under `wine`/`wine64`, and rewrites the tool's output
-  back from `z:\...` paths to plain unix paths so your build system's error
+- As `cl`, `link`, `lib`, and the rest: it loads a per-architecture
+  `env.json`, sets `INCLUDE`/`LIB`/`WINEPATH`, and rewrites absolute Unix
+  paths in the arguments to Wine's `z:\...` form (Wine and cl.exe
+  otherwise mishandle relative includes — see
+  [winehq bug 55200](https://bugs.winehq.org/show_bug.cgi?id=55200)). It
+  then runs the real `.exe` under `wine`/`wine64`, and rewrites `z:\...`
+  paths back to Unix paths in the output, so your build system's error
   parsing keeps working.
-- Invoked as `vintner` → it exposes the `download`, `install`, `env` and
-  `version` management subcommands described below (short aliases: `dl`,
-  `i`, `e`, `v`; `help`/`h` prints usage).
+- As `vintner`: it exposes the `download`, `install`, `env`, `version`
+  and `completion` subcommands below (short aliases: `dl`, `i`, `e`, `v`;
+  `help`/`h` prints usage).
 
 ## Installation
 
-**On ALT Linux, via [Nivora](https://github.com/Cheviiot/Nivora):**
+On ALT Linux, via [Nivora](https://github.com/Cheviiot/Nivora):
 
 ```bash
 stplr install nivora/vintner
 ```
 
-**Prebuilt binary**, from the [latest release](https://github.com/Cheviiot/vintner/releases/latest):
+Prebuilt binary, from the [latest release](https://github.com/Cheviiot/vintner/releases/latest):
 
 ```bash
 curl -fLo vintner "https://github.com/Cheviiot/vintner/releases/latest/download/vintner-linux-$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')"
@@ -61,18 +62,18 @@ chmod +x vintner
 sudo install vintner /usr/local/bin/vintner
 ```
 
-**From source** — see [Building from source](#building-from-source).
+From source: see [Building from source](#building-from-source).
 
-Either way, `wine`/`wine64`, `msitools` (for `msiextract`) and `git` need to
-be on `PATH` at run time (see [Prerequisites](#prerequisites) below); Nivora
-installs already pull these in as package dependencies.
+Either way, `wine`/`wine64`, `msitools` (for `msiextract`) and `git` need
+to be on `PATH` at run time. Nivora installs pull these in automatically
+as package dependencies.
 
 ### Prerequisites
 
 - `wine` (or `wine64`) — runs the real `cl.exe`/`link.exe`/etc.
 - `msitools` (`msiextract`) — unpacks the `.msi` payloads MSVC/WinSDK ship as.
-- `git` — used to apply the small compatibility patches bundled with
-  `download` (see [Compatibility patches](#compatibility-patches) below).
+- `git` — applies the compatibility patches bundled with `download` (see
+  [Compatibility patches](#compatibility-patches)).
 
 On ALT Linux:
 
@@ -83,9 +84,9 @@ pkcon install wine msitools git
 ## Quick start
 
 ```bash
-# 1. Download and unpack MSVC + Windows SDK into ~/.vintner (requires
-#    accepting Microsoft's Visual Studio Build Tools license). Pass
-#    --dest <dir> for a different location.
+# 1. Download and unpack MSVC + Windows SDK into ~/.vintner (accepts
+#    Microsoft's Visual Studio Build Tools license). Pass --dest <dir>
+#    for a different location.
 vintner download --accept-license
 
 # 2. Wire up the tool wrappers
@@ -119,38 +120,40 @@ vintner completion bash|zsh                                       print a shell 
 `vintner download -h` for the full list with descriptions.
 
 `--list-workloads`/`--list-components` print every workload/component id
-(with its human-readable title) available in the fetched manifest and exit
-without downloading anything — useful for discovering what to pass as a bare
-package id or via `--with-*`. `--print-deps-tree` prints the dependency tree
-of whatever would actually be selected (honoring every other flag), also
-without downloading.
+and its human-readable title from the fetched manifest, then exit
+without downloading anything. Useful for finding what to pass as a bare
+package id or through `--with-*`. `--print-deps-tree` prints the
+dependency tree of whatever would actually be selected — honoring every
+other flag — without downloading anything.
 
 ## Building drivers (WDK)
+
+`--with-wdk` also fetches the Windows Driver Kit: headers, import libs,
+and the MSBuild `WindowsKernelModeDriver10.0`/`WindowsUserModeDriver10.0`
+PlatformToolsets.
 
 ```bash
 vintner download --accept-license --with-wdk
 ```
 
-additionally fetches the Windows Driver Kit (headers, import libs, and the
-MSBuild `WindowsKernelModeDriver10.0`/`WindowsUserModeDriver10.0`
-PlatformToolsets) so `msbuild` can build real KMDF/UMDF drivers —
-compiling, linking, INF stamping and the `Inf2Cat` signability check (with
-`SignMode=off`) all work under Wine. Verified end-to-end against a real
-sample driver from
+With it, `msbuild` builds real KMDF/UMDF drivers — compiling, linking,
+INF stamping, and the `Inf2Cat` signability check (`SignMode=off`) all
+work under Wine. Tested against a real sample driver from
 [microsoft/Windows-driver-samples](https://github.com/microsoft/Windows-driver-samples).
-Only x64 and arm64 targets have a WDK package upstream (no x86/arm).
+Only x64 and arm64 targets have a WDK package upstream; there's no x86 or
+arm one.
 
 ## Language
 
-CLI messages (usage text, progress lines, prompts) default to English. Set
-`VINTNER_LANG=ru` (or have a `ru`-prefixed `LC_ALL`/`LC_MESSAGES`/`LANG`,
-e.g. `ru_RU.UTF-8`) for Russian:
+CLI text (usage, progress lines, prompts) defaults to English. Set
+`VINTNER_LANG=ru` (or a `ru`-prefixed `LC_ALL`/`LC_MESSAGES`/`LANG`, e.g.
+`ru_RU.UTF-8`) for Russian:
 
 ```bash
 VINTNER_LANG=ru vintner help
 ```
 
-Deeper error text bubbled up from internal packages stays in English.
+Error text from internal packages stays in English regardless.
 
 ## Shell completion
 
@@ -159,13 +162,13 @@ source <(vintner completion bash)   # or add to ~/.bashrc
 source <(vintner completion zsh)    # or add to ~/.zshrc
 ```
 
-Completes subcommands (including the short aliases), `download`'s flags,
+Completes subcommands, including the short aliases, `download`'s flags,
 and directory arguments for `install`/`env --bin`.
 
 ## Using clang-cl/lld-link instead of Wine
 
-You don't need Wine at all if you drive the (nonredistributable) MSVC/WinSDK
-headers and libraries with Clang/LLD in MSVC-compatible mode:
+The MSVC/WinSDK headers and libraries work directly with Clang/LLD in
+MSVC-compatible mode. No Wine needed:
 
 ```bash
 eval "$(vintner env --bin ~/.vintner/bin/x64)"
@@ -173,55 +176,44 @@ clang-cl -c hello.c
 lld-link hello.obj -out:hello.exe
 ```
 
+## toolrelay.exe
+
+`install` compiles `assets/vendor/toolrelay.cpp`, a small native Windows
+launcher, with the freshly-installed host-arch `cl.exe`. This is
+best-effort: if `wine` isn't available yet, or the compile fails, install
+still succeeds, and tool invocations just skip it. When present, every
+non-MSBuild tool call is routed through it via two named FIFOs.
+
+That's what lets `mt.exe`'s CMake-compatibility exit code
+(`0x41020001` → `0xbb`) survive Wine's own exit-code truncation: a native
+Windows process can read the real 32-bit exit code via
+`GetExitCodeProcess()` before Wine collapses it to a single byte on the
+way back to Unix.
+
+## Compatibility patches
+
+`download` applies a few small patches (`assets/patches`) to the
+downloaded MSVC/WinSDK tree, so `VsDevCmd.bat` and MSBuild's
+SDK-detection props work without a Windows Registry, which doesn't exist
+under Wine. They look up the SDK directly under the VS install root
+instead of querying the registry, skip telemetry, and don't fail devcmd
+setup when an optional component (ConnectionManagerExe, bundled
+CMake/Ninja) is missing.
+
 ## Building from source
 
 ```bash
 go build -o vintner ./cmd/vintner
-```
-
-Go 1.23+ is all you need to build it; `wine`/`msitools` are only needed at
-run time (`install`/tool invocation and `download` respectively).
-
-```bash
 go vet ./...
 go test ./...
 ```
 
-## How the pieces fit together
-
-<details>
-<summary><strong>toolrelay.exe</strong> — surviving Wine's exit-code truncation</summary>
-
-`install` compiles `assets/vendor/toolrelay.cpp` (a small native Windows
-launcher, original to this project) with the freshly-installed host-arch
-`cl.exe` (best-effort: if `wine` isn't present yet, or the compile fails,
-install still succeeds and the wrapper runtime just falls back to invoking
-tools directly through wine). When present, every non-MSBuild tool
-invocation is routed through it via two named FIFOs. This is what lets
-`mt.exe`'s CMake-compatibility exit-code translation (`0x41020001` → `0xbb`)
-survive Wine's own exit-code truncation: only a native Windows process
-observing the untranslated code via `GetExitCodeProcess()` can catch it
-before Wine marshals the process exit back to Unix and drops everything but
-the low byte.
-
-</details>
-
-<details>
-<summary><strong>Compatibility patches</strong> — making MSBuild work without a Windows Registry</summary>
-
-`download` applies a handful of small patches (`assets/patches`) to the
-downloaded MSVC/WinSDK tree — independently written for this project — that
-make `VsDevCmd.bat` and MSBuild's SDK-detection props work without a
-Windows Registry (which doesn't exist under Wine): they check the SDK
-directly under the VS install root instead of querying the registry, skip
-telemetry, and don't hard-fail devcmd setup when an optional component
-(ConnectionManagerExe, bundled CMake/Ninja) wasn't downloaded.
-
-</details>
+Go 1.23+ builds it. `wine`/`msitools` are only needed at run time, for
+`install`/tool invocation and `download` respectively.
 
 ## License
 
-MIT, see [LICENSE.txt](LICENSE.txt) — covers vintner's own source only. The
-MSVC Build Tools / Windows SDK / WDK that `download` fetches remain governed
-by Microsoft's own license (accepted via `--accept-license`), same as with
+MIT (see [LICENSE.txt](LICENSE.txt)) for vintner's own source. The MSVC
+Build Tools, Windows SDK, and WDK that `download` fetches stay under
+Microsoft's own license (accepted via `--accept-license`), same as with
 any other way of obtaining them.
