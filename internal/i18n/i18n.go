@@ -77,8 +77,8 @@ Usage:
   vintner completion bash|zsh          print a shell completion script
 
 Run "vintner <command> --help" for that command's own options - download
-has many, including --with-wdk, --list-workloads, --list-components and
---print-deps-tree.
+has many, including --with-wdk, --with-dxsdk, --list-workloads,
+--list-components and --print-deps-tree.
 
 --dest/[dir] default to ~/.vintner if omitted.
 Language: set VINTNER_LANG=ru (or LANG=ru_RU...) for Russian output.
@@ -99,8 +99,8 @@ Once installed, add <dir>/bin/<arch> to PATH and invoke the tools directly:
   vintner completion bash|zsh          вывести скрипт автодополнения для оболочки
 
 Запустите «vintner <команда> --help» для параметров конкретной команды —
-у download их много, включая --with-wdk, --list-workloads, --list-components
-и --print-deps-tree.
+у download их много, включая --with-wdk, --with-dxsdk, --list-workloads,
+--list-components и --print-deps-tree.
 
 --dest/[каталог] по умолчанию — ~/.vintner.
 Язык: установите VINTNER_LANG=en (или LANG=en_US...) для вывода на английском.
@@ -160,6 +160,10 @@ Once installed, add <dir>/bin/<arch> to PATH and invoke the tools directly:
 	"download.wdk_installed": {
 		EN: "Installed WDK (%s) %s at %s\n",
 		RU: "WDK (%s) %s установлен в %s\n",
+	},
+	"download.dxsdk_installed": {
+		EN: "Installed DirectX SDK (June 2010) at %s\n",
+		RU: "DirectX SDK (июнь 2010) установлен в %s\n",
 	},
 	"download.workloads_header": {
 		EN: "Available Workloads (%d):\n",

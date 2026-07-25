@@ -8,8 +8,9 @@ vintner cross-compiles with the real MSVC toolchain on Linux, using Wine.
 One Go binary drops in as `cl`, `link`, `lib`, `rc`, `midl`, `mc`, `mt`,
 `dumpbin`, `msbuild`, `nmake`, `ml`, `ml64`, `armasm`, `armasm64`, plus
 `cmd`/`findstr` shims, so once installed you invoke the real Microsoft
-tools exactly like on Windows. It handles full MSBuild projects, and with
-`--with-wdk`, real KMDF/UMDF Windows drivers.
+tools exactly like on Windows. It handles full MSBuild projects, with
+`--with-wdk` real KMDF/UMDF Windows drivers, and with `--with-dxsdk` the
+real D3DX9 headers/libs.
 
 Inspired by [mstorsjo/msvc-wine](https://github.com/mstorsjo/msvc-wine)'s
 approach: download the real MSVC/WinSDK, wrap the compiler under Wine.
@@ -21,6 +22,7 @@ approach: download the real MSVC/WinSDK, wrap the compiler under Wine.
 - [Quick start](#quick-start)
 - [Commands](#commands)
 - [Building drivers (WDK)](#building-drivers-wdk)
+- [Building against D3DX9 (DirectX SDK)](#building-against-d3dx9-directx-sdk)
 - [Language](#language)
 - [Shell completion](#shell-completion)
 - [Using clang-cl/lld-link instead of Wine](#using-clang-cllld-link-instead-of-wine)
@@ -112,12 +114,13 @@ vintner completion bash|zsh                                       print a shell 
 
 `download`'s main options: `--msvc-version`, `--sdk-version`,
 `--architecture` (repeatable: `x86`/`x64`/`arm`/`arm64`/`host`),
-`--host-arch`, `--only-host`, `--with-wdk` (see below), `--ignore`
-(repeatable), `--only-download`, `--only-unpack`, `--keep-unpack`,
-`--skip-patch`, `--cache`, `--language`, `--include-optional`,
-`--skip-recommended`, `--major`, `--preview`, `--manifest`,
-`--list-workloads`, `--list-components`, `--print-deps-tree`. Run
-`vintner download -h` for the full list with descriptions.
+`--host-arch`, `--only-host`, `--with-wdk` (see below), `--with-dxsdk`
+(see below), `--ignore` (repeatable), `--only-download`, `--only-unpack`,
+`--keep-unpack`, `--skip-patch`, `--cache`, `--language`,
+`--include-optional`, `--skip-recommended`, `--major`, `--preview`,
+`--manifest`, `--list-workloads`, `--list-components`,
+`--print-deps-tree`. Run `vintner download -h` for the full list with
+descriptions.
 
 `--list-workloads`/`--list-components` print every workload/component id
 and its human-readable title from the fetched manifest, then exit
@@ -142,6 +145,22 @@ work under Wine. Tested against a real sample driver from
 [microsoft/Windows-driver-samples](https://github.com/microsoft/Windows-driver-samples).
 Only x64 and arm64 targets have a WDK package upstream; there's no x86 or
 arm one.
+
+## Building against D3DX9 (DirectX SDK)
+
+`--with-dxsdk` fetches the DirectX SDK (June 2010) — the last standalone
+release of D3DX9/10/11, XInput and XAudio2, dropped from the Windows SDK
+entirely once D3DX was deprecated. It unpacks the real headers and x86/x64
+import libs (`d3dx9.h`/`d3dx9.lib` included) to `<dest>/DXSDK`.
+
+```bash
+vintner download --accept-license --with-dxsdk
+```
+
+Point your project's `IncludePath`/`LibraryPath` at
+`<dest>/DXSDK/Include` and `<dest>/DXSDK/Lib/x86` or `<dest>/DXSDK/Lib/x64`.
+Requires `cabextract` on `PATH` (the installer is a self-extracting CAB
+archive).
 
 ## Language
 

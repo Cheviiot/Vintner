@@ -35,6 +35,7 @@ func runDownload(args []string) int {
 	listComponents := fs.Bool("list-components", false, "list available components from the manifest and exit, without downloading anything")
 	printDepsTree := fs.Bool("print-deps-tree", false, "print the dependency tree of the selected packages and exit, without downloading anything")
 	withWDK := fs.Bool("with-wdk", false, "also fetch and install the Windows Driver Kit (headers, libs and MSBuild driver PlatformToolsets, for building KMDF/UMDF drivers)")
+	withDXSDK := fs.Bool("with-dxsdk", false, "also fetch and install the DirectX SDK (June 2010): real D3DX9/10/11, XInput and XAudio2 headers and import libs, dropped from the modern Windows SDK")
 	var archsFlag stringList
 	fs.Var(&archsFlag, "architecture", "target architecture to include (x86, x64, arm, arm64, host); repeatable")
 	var ignoreFlag stringList
@@ -219,6 +220,13 @@ func runDownload(args []string) int {
 		}
 	}
 
+	if *withDXSDK && !*onlyUnpack {
+		if err := downloadDXSDK(cache, destAbs); err != nil {
+			fmt.Fprintln(os.Stderr, "vintner download:", err)
+			return 1
+		}
+	}
+
 	fmt.Println(i18n.T("download.done", destAbs))
 	return 0
 }
@@ -252,6 +260,18 @@ func downloadWDK(opts *download.Options, selected []*download.Package, cache, de
 		}
 		fmt.Print(i18n.T("download.wdk_installed", arch, version, wdkDir))
 	}
+	return nil
+}
+
+// downloadDXSDK fetches and unpacks the DirectX SDK (June 2010) into
+// destAbs/DXSDK. See internal/download/dxsdk.go for why this is a separate
+// download path from the rest of ExpandSelection/FetchPayloads/Unpack.
+func downloadDXSDK(cache, destAbs string) error {
+	dxsdkDir, err := download.DownloadDXSDK(cache, destAbs)
+	if err != nil {
+		return err
+	}
+	fmt.Print(i18n.T("download.dxsdk_installed", dxsdkDir))
 	return nil
 }
 
