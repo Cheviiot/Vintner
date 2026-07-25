@@ -83,8 +83,10 @@ func Run(tool string, args []string) int {
 		// MSBuild: skip all filtering/toolrelay (its output is meant to be
 		// read as-is), and add the extra environment MSBuild's own
 		// toolset/SDK-detection props need on top of the generic
-		// INCLUDE/LIB/WINEPATH.
-		cmd := exec.Command(wineBin, append([]string{toolExePath}, rewritten...)...)
+		// INCLUDE/LIB/WINEPATH, plus any global properties a project file
+		// itself could otherwise override (see msbuildGlobalArgs).
+		msArgs := append(msbuildGlobalArgs(cfg, rewritten), rewritten...)
+		cmd := exec.Command(wineBin, append([]string{toolExePath}, msArgs...)...)
 		env := buildEnv(paths)
 		for k, v := range msbuildEnv(cfg, paths) {
 			env = append(env, k+"="+v)

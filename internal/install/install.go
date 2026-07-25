@@ -62,6 +62,10 @@ func Install(dest, selfBinary string) error {
 		return err
 	}
 
+	if err := aliasPlatformToolsets(dest); err != nil {
+		return err
+	}
+
 	includeDir := filepath.Join(msvcDir, "include")
 	if err := Lowercase(includeDir, LowercaseOptions{Symlink: true}); err != nil {
 		return fmt.Errorf("lowercasing %s: %w", includeDir, err)

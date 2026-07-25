@@ -39,6 +39,14 @@ func TestMsbuildEnvBasics(t *testing.T) {
 	if env["DisableRegistryUse"] != "true" {
 		t.Errorf(`env["DisableRegistryUse"] = %q, want "true"`, env["DisableRegistryUse"])
 	}
+	if env["CheckMSVCComponents"] != "false" {
+		t.Errorf(`env["CheckMSVCComponents"] = %q, want "false" (else CheckVCToolsetVersion errors on an aliased PlatformToolset)`, env["CheckMSVCComponents"])
+	}
+	// VCToolsVersion must be a real version string (see msbuildEnv's doc
+	// comment on it: leaving it unset makes Microsoft.Cpp.VCTools.props
+	// substitute a placeholder that then breaks unconditional version
+	// comparisons elsewhere). CheckMSVCComponents=false is what keeps this
+	// safe to combine with an aliased PlatformToolset.
 	if env["VCToolsVersion"] != cfg.MSVCVer {
 		t.Errorf(`env["VCToolsVersion"] = %q, want %q`, env["VCToolsVersion"], cfg.MSVCVer)
 	}
@@ -61,7 +69,24 @@ func TestMsbuildEnvDiscoversEveryToolsetVersion(t *testing.T) {
 	cfg := &wineenv.Config{Arch: "x64", Host: "x64", DotnetHost: "amd64", MSVCVer: "14.51.36231", SDKVer: "10.0.26100.0"}
 	paths, base := newTestPaths(t, cfg)
 
-	for _, v := range []string{"v145", "v180", "not-a-version"} {
+	// Real layout has two independent sources feeding VCInstallDir_<N>/
+	// VCToolsInstallDir_<N> (see toolsetSuffixes' doc comment for why both
+	// are needed): the PlatformToolset short names a downloaded compiler
+	// ships default-props for, and MSBuild's own fixed schema-version dirs.
+	buildDir := filepath.Join(base, "vc", "Auxiliary", "Build")
+	if err := os.MkdirAll(buildDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{
+		"Microsoft.VCToolsVersion.v145.default.props",
+		"Microsoft.VCToolsVersion.v143.default.props",
+		"Microsoft.VCToolsVersion.default.props", // no version suffix - must not match
+	} {
+		if err := os.WriteFile(filepath.Join(buildDir, name), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, v := range []string{"v180", "not-a-version"} {
 		if err := os.MkdirAll(filepath.Join(base, "MSBuild", "Microsoft", "VC", v), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -69,7 +94,7 @@ func TestMsbuildEnvDiscoversEveryToolsetVersion(t *testing.T) {
 
 	env := msbuildEnv(cfg, paths)
 
-	for _, n := range []string{"145", "180"} {
+	for _, n := range []string{"145", "143", "180"} {
 		if _, ok := env["VCInstallDir_"+n]; !ok {
 			t.Errorf("expected VCInstallDir_%s to be set", n)
 		}
@@ -79,6 +104,64 @@ func TestMsbuildEnvDiscoversEveryToolsetVersion(t *testing.T) {
 	}
 	if _, ok := env["VCInstallDir_not-a-version"]; ok {
 		t.Error("a directory not matching v<digits> should not have produced a VCInstallDir_ entry")
+	}
+}
+
+func TestToolsetSuffixesDedupsOverlap(t *testing.T) {
+	base := t.TempDir()
+	buildDir := filepath.Join(base, "vc", "Auxiliary", "Build")
+	if err := os.MkdirAll(buildDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(buildDir, "Microsoft.VCToolsVersion.v180.default.props"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(base, "MSBuild", "Microsoft", "VC", "v180"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	got := toolsetSuffixes(base)
+	count := 0
+	for _, n := range got {
+		if n == "180" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Errorf("toolsetSuffixes() returned %q with %d entries for \"180\" (from both sources), want exactly 1", got, count)
+	}
+}
+
+func TestMsbuildGlobalArgsForcesWindowsTargetPlatformVersion(t *testing.T) {
+	cfg := &wineenv.Config{SDKVer: "10.0.26100.0"}
+
+	got := msbuildGlobalArgs(cfg, []string{"Foo.sln", "/p:Configuration=Release"})
+	want := "/p:WindowsTargetPlatformVersion=10.0.26100.0"
+	found := false
+	for _, a := range got {
+		if a == want {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("msbuildGlobalArgs(...) = %v, want it to contain %q", got, want)
+	}
+}
+
+func TestMsbuildGlobalArgsRespectsExplicitOverride(t *testing.T) {
+	cfg := &wineenv.Config{SDKVer: "10.0.26100.0"}
+
+	for _, explicit := range []string{
+		"/p:WindowsTargetPlatformVersion=10.0.19041.0",
+		"-p:WindowsTargetPlatformVersion=10.0.19041.0",
+		"/property:WindowsTargetPlatformVersion=10.0.19041.0",
+	} {
+		got := msbuildGlobalArgs(cfg, []string{"Foo.sln", explicit})
+		for _, a := range got {
+			if reGlobalProp("WindowsTargetPlatformVersion").MatchString(a) {
+				t.Errorf("msbuildGlobalArgs with explicit %q also injected %q - should have left the caller's value alone", explicit, a)
+			}
+		}
 	}
 }
 
