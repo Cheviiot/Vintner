@@ -79,8 +79,16 @@ HANDLE MakeKillOnCloseJob() {
 }
 
 bool IsMtExe(const wchar_t *path) {
-  const wchar_t *name = wcsrchr(path, L'\\');
-  name = name ? name + 1 : path;
+  // vintner passes toolExePath straight through from Go's filepath.Join,
+  // which uses forward slashes even for a path that's about to be handed
+  // to a native Windows process - so the separator here isn't reliably
+  // '\\'. Check both; using whichever comes later in the string covers a
+  // mixed-separator path too.
+  const wchar_t *back = wcsrchr(path, L'\\');
+  const wchar_t *fwd = wcsrchr(path, L'/');
+  const wchar_t *sep = back;
+  if (fwd && (!sep || fwd > sep)) sep = fwd;
+  const wchar_t *name = sep ? sep + 1 : path;
   return _wcsicmp(name, L"mt.exe") == 0;
 }
 
