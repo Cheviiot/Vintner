@@ -23,6 +23,7 @@ shims, all work from your `PATH` — including full MSBuild projects and, with
 - [Commands](#commands)
 - [Building drivers (WDK)](#building-drivers-wdk)
 - [Language](#language)
+- [Shell completion](#shell-completion)
 - [Using clang-cl/lld-link instead of Wine](#using-clang-cllld-link-instead-of-wine)
 - [Building from source](#building-from-source)
 - [How the pieces fit together](#how-the-pieces-fit-together)
@@ -103,6 +104,7 @@ vintner install (i) [dir]                                         wire up wrappe
 vintner env (e) --bin <dir>/bin/<arch>                            print INCLUDE/LIB for native clang-cl/lld-link use
 vintner version (v)                                               print the version
 vintner help (h)                                                  print usage
+vintner completion bash|zsh                                       print a shell completion script
 ```
 
 `--dest`/`[dir]` both default to `~/.vintner` when omitted.
@@ -149,6 +151,16 @@ VINTNER_LANG=ru vintner help
 ```
 
 Deeper error text bubbled up from internal packages stays in English.
+
+## Shell completion
+
+```bash
+source <(vintner completion bash)   # or add to ~/.bashrc
+source <(vintner completion zsh)    # or add to ~/.zshrc
+```
+
+Completes subcommands (including the short aliases), `download`'s flags,
+and directory arguments for `install`/`env --bin`.
 
 ## Using clang-cl/lld-link instead of Wine
 

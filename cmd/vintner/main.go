@@ -47,6 +47,8 @@ func runCLI(args []string) int {
 		return runInstall(args[1:])
 	case "env", "e":
 		return runEnv(args[1:])
+	case "completion":
+		return runCompletion(args[1:])
 	case "version", "v", "--version":
 		fmt.Println("vintner " + version)
 		return 0

@@ -74,6 +74,7 @@ Usage:
   vintner env (e) --bin <dir/bin/arch> print INCLUDE/LIB for native clang-cl/lld-link use
   vintner version (v)                  print the version
   vintner help (h)                     show this message
+  vintner completion bash|zsh          print a shell completion script
 
 Run "vintner <command> --help" for that command's own options - download
 has many, including --with-wdk, --list-workloads, --list-components and
@@ -81,6 +82,7 @@ has many, including --with-wdk, --list-workloads, --list-components and
 
 --dest/[dir] default to ~/.vintner if omitted.
 Language: set VINTNER_LANG=ru (or LANG=ru_RU...) for Russian output.
+Completion: source <(vintner completion bash)  # or zsh
 
 Once installed, add <dir>/bin/<arch> to PATH and invoke the tools directly:
   cl, link, lib, ml, ml64, mc, midl, mt, rc, dumpbin, msbuild, nmake, armasm, armasm64, cmd, findstr
@@ -94,6 +96,7 @@ Once installed, add <dir>/bin/<arch> to PATH and invoke the tools directly:
   vintner env (e) --bin <dir/bin/arch> вывести INCLUDE/LIB для clang-cl/lld-link напрямую
   vintner version (v)                  показать версию
   vintner help (h)                     показать эту справку
+  vintner completion bash|zsh          вывести скрипт автодополнения для оболочки
 
 Запустите «vintner <команда> --help» для параметров конкретной команды —
 у download их много, включая --with-wdk, --list-workloads, --list-components
@@ -101,6 +104,7 @@ Once installed, add <dir>/bin/<arch> to PATH and invoke the tools directly:
 
 --dest/[каталог] по умолчанию — ~/.vintner.
 Язык: установите VINTNER_LANG=en (или LANG=en_US...) для вывода на английском.
+Автодополнение: source <(vintner completion bash)  # или zsh
 
 После установки добавьте <dir>/bin/<arch> в PATH и вызывайте инструменты напрямую:
   cl, link, lib, ml, ml64, mc, midl, mt, rc, dumpbin, msbuild, nmake, armasm, armasm64, cmd, findstr
