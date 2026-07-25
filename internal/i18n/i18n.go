@@ -73,6 +73,7 @@ Usage:
   vintner install (i) [dir]            wire up wrappers for a downloaded MSVC
   vintner env (e) --bin <dir/bin/arch> print INCLUDE/LIB for native clang-cl/lld-link use
   vintner version (v)                  print the version
+  vintner doctor                       check wine/toolchain setup
   vintner help (h)                     show this message
   vintner completion bash|zsh          print a shell completion script
 
@@ -98,6 +99,7 @@ not the default ~/.vintner/bin/<host-arch>):
   vintner install (i) [каталог]        настроить обёртки для скачанного MSVC
   vintner env (e) --bin <dir/bin/arch> вывести INCLUDE/LIB для clang-cl/lld-link напрямую
   vintner version (v)                  показать версию
+  vintner doctor                       проверить настройку wine/toolchain
   vintner help (h)                     показать эту справку
   vintner completion bash|zsh          вывести скрипт автодополнения для оболочки
 
@@ -187,5 +189,42 @@ not the default ~/.vintner/bin/<host-arch>):
 	"download.license_reprompt": {
 		EN: "Do you accept the license? Answer \"yes\" or \"no\": ",
 		RU: "Вы принимаете лицензию? Ответьте «yes» или «no»: ",
+	},
+
+	"doctor.usage": {
+		EN: "usage: vintner doctor",
+		RU: "использование: vintner doctor",
+	},
+	"doctor.section_wine": {
+		EN: "Wine:",
+		RU: "Wine:",
+	},
+	"doctor.section_extract": {
+		EN: "Extraction tools:",
+		RU: "Инструменты распаковки:",
+	},
+	"doctor.section_toolchain": {
+		EN: "Installed toolchain:",
+		RU: "Установленный набор инструментов:",
+	},
+	"doctor.msitools_missing": {
+		EN: "msitools: not found (install the msitools package - needed by `vintner download`)",
+		RU: "msitools: не найден (установите пакет msitools — нужен для `vintner download`)",
+	},
+	"doctor.cabextract_missing": {
+		EN: "cabextract: not found (install the cabextract package - only needed for --with-wdk/--with-dxsdk)",
+		RU: "cabextract: не найден (установите пакет cabextract — нужен только для --with-wdk/--with-dxsdk)",
+	},
+	"doctor.no_toolchain": {
+		EN: "no installed toolchain found under %s (run `vintner download --accept-license && vintner install` first, or set VINTNER_BIN)",
+		RU: "установленный набор инструментов не найден в %s (сначала выполните `vintner download --accept-license && vintner install`, либо задайте VINTNER_BIN)",
+	},
+	"doctor.summary_ok": {
+		EN: "\nAll checks passed.",
+		RU: "\nВсе проверки пройдены.",
+	},
+	"doctor.summary_fail": {
+		EN: "\nSome checks failed - see [FAIL] lines above.",
+		RU: "\nНекоторые проверки не пройдены — см. строки [FAIL] выше.",
 	},
 }

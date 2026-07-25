@@ -22,6 +22,7 @@ approach: download the real MSVC/WinSDK, wrap the compiler under Wine.
 - [Quick start](#quick-start)
 - [Commands](#commands)
 - [Invoking tools without PATH](#invoking-tools-without-path)
+- [Diagnosing problems (vintner doctor)](#diagnosing-problems-vintner-doctor)
 - [Building drivers (WDK)](#building-drivers-wdk)
 - [Building against D3DX9 (DirectX SDK)](#building-against-d3dx9-directx-sdk)
 - [Automated/scripted builds](#automatedscripted-builds)
@@ -46,9 +47,9 @@ depending on the name it's invoked as.
   then runs the real `.exe` under `wine`/`wine64`, and rewrites `z:\...`
   paths back to Unix paths in the output, so your build system's error
   parsing keeps working.
-- As `vintner`: it exposes the `download`, `install`, `env`, `version`
-  and `completion` subcommands below (short aliases: `dl`, `i`, `e`, `v`;
-  `help`/`h` prints usage).
+- As `vintner`: it exposes the `download`, `install`, `env`, `version`,
+  `doctor` and `completion` subcommands below (short aliases: `dl`, `i`,
+  `e`, `v`; `help`/`h` prints usage).
 
 ## Installation
 
@@ -113,6 +114,7 @@ vintner download (dl) --accept-license [--dest <dir>] [options]   fetch and unpa
 vintner install (i) [dir]                                         wire up wrappers for a downloaded MSVC
 vintner env (e) --bin <dir>/bin/<arch>                            print INCLUDE/LIB for native clang-cl/lld-link use
 vintner version (v)                                               print the version
+vintner doctor                                                    check wine/toolchain setup
 vintner help (h)                                                  print usage
 vintner completion bash|zsh                                       print a shell completion script
 ```
@@ -153,6 +155,20 @@ for a non-default `--dest`, or to pick a specific architecture when more
 than one is installed), otherwise defaults to
 `~/.vintner/bin/<host-arch>`, the layout a plain `vintner download &&
 vintner install` with no `--dest` override produces.
+
+## Diagnosing problems (vintner doctor)
+
+```bash
+vintner doctor
+```
+
+Checks the things vintner actually needs at runtime — that `wine`/`wine64`
+is on `PATH` and actually runs, that `msitools`/`cabextract` are present,
+and that every installed `<dest>/bin/<arch>` toolchain (or the one
+`VINTNER_BIN` points at) has its MSVC/SDK/MSBuild directories in place —
+and prints a pass/fail checklist. Exits non-zero if anything failed.
+Useful before filing a bug, or after a `download`/`install` that seemed to
+finish but left tools failing in confusing ways.
 
 ## Building drivers (WDK)
 

@@ -49,7 +49,7 @@ const downloadFlags = "--dest --cache --major --preview --manifest --accept-lice
 // plus every short alias) - unlike the wrapped-tool names, these really are
 // fixed enough to hand-maintain: adding one is rare and always touches
 // main.go's dispatch switch right next to this file anyway.
-const subcommandNames = "download dl install i env e version v help h completion"
+const subcommandNames = "download dl install i env e version v doctor help h completion"
 
 func bashCompletionScript() string {
 	return `# vintner bash completion - eval "$(vintner completion bash)"
@@ -104,6 +104,7 @@ _vintner() {
         'e:alias for env'
         'version:print the version'
         'v:alias for version'
+        'doctor:check wine/toolchain setup'
         'help:print usage'
         'h:alias for help'
         'completion:print a shell completion script'

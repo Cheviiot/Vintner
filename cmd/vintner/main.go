@@ -50,6 +50,8 @@ func runCLI(args []string) int {
 		return runEnv(args[1:])
 	case "completion":
 		return runCompletion(args[1:])
+	case "doctor":
+		return runDoctor(args[1:])
 	case "version", "v", "--version":
 		fmt.Println(versionString())
 		return 0
