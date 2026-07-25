@@ -50,7 +50,7 @@ func runCLI(args []string) int {
 	case "completion":
 		return runCompletion(args[1:])
 	case "version", "v", "--version":
-		fmt.Println("vintner " + version)
+		fmt.Println(versionString())
 		return 0
 	case "-h", "--help", "help", "h":
 		printUsage()
