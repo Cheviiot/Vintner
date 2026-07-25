@@ -29,7 +29,13 @@ func execInherit(args []string) int {
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
+	setNewProcessGroup(cmd)
+	if err := cmd.Start(); err != nil {
+		return 127
+	}
+	stopSignals := forwardSignals(cmd.Process)
+	defer stopSignals()
+	if err := cmd.Wait(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			return exitErr.ExitCode()
 		}

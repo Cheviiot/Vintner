@@ -91,6 +91,7 @@ func Run(tool string, args []string) int {
 		}
 		cmd.Env = env
 		cmd.Stdin = os.Stdin
+		setNewProcessGroup(cmd)
 		exitCode = runRawStdout(cmd)
 	default:
 		relay := filepath.Join(paths.BaseUnix, "bin", toolRelayName)
@@ -100,6 +101,7 @@ func Run(tool string, args []string) int {
 			cmd := exec.Command(wineBin, append([]string{toolExePath}, rewritten...)...)
 			cmd.Env = buildEnv(paths)
 			cmd.Stdin = os.Stdin
+			setNewProcessGroup(cmd)
 			exitCode = runFiltered(cmd, s.stdoutFilter, s.stderrFilter)
 		}
 	}
@@ -137,6 +139,7 @@ func runViaToolRelay(wineBin, relayExe, exePath string, args []string, paths *wi
 	cmdArgs := append([]string{relayExe, exePath}, args...)
 	cmd := exec.Command(wineBin, cmdArgs...)
 	cmd.Env = append(buildEnv(paths), "MSVCGOWINE_STDOUT="+stdoutFifo, "MSVCGOWINE_STDERR="+stderrFifo)
+	setNewProcessGroup(cmd)
 	if devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0); err == nil {
 		defer devNull.Close()
 		cmd.Stdout = devNull
@@ -147,6 +150,8 @@ func runViaToolRelay(wineBin, relayExe, exePath string, args []string, paths *wi
 		fmt.Fprintln(os.Stderr, "vintner:", err)
 		return 1
 	}
+	stopSignals := forwardSignals(cmd.Process)
+	defer stopSignals()
 
 	var wg sync.WaitGroup
 	wg.Add(2)
@@ -204,6 +209,8 @@ func runRawStdout(cmd *exec.Cmd) int {
 		fmt.Fprintln(os.Stderr, "vintner:", err)
 		return 1
 	}
+	stopSignals := forwardSignals(cmd.Process)
+	defer stopSignals()
 
 	doneOut := make(chan struct{})
 	doneErr := make(chan struct{})
@@ -278,6 +285,8 @@ func runFiltered(cmd *exec.Cmd, stdoutF, stderrF lineFilter) int {
 		fmt.Fprintln(os.Stderr, "vintner:", err)
 		return 1
 	}
+	stopSignals := forwardSignals(cmd.Process)
+	defer stopSignals()
 
 	doneOut := make(chan struct{})
 	doneErr := make(chan struct{})
