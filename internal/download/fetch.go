@@ -149,27 +149,63 @@ func tryDownloadPayload(payload Payload, dest, fileID string, allowHashMismatch 
 
 var downloadHTTPClient = &http.Client{Timeout: 30 * time.Minute}
 
+// httpDownloadFile downloads url to dest via a dest+".part" temp file,
+// resuming from wherever a previous attempt left off if one exists - MSVC/
+// WinSDK/WDK/DXSDK payloads run into the hundreds of MB to multiple GB, so
+// restarting an interrupted download from byte 0 (a dropped connection, a
+// retry after this same function returned an error) wastes real time and
+// bandwidth on a flaky connection. Requests a byte Range starting at the
+// existing .part file's size, if any; a server that doesn't honor Range
+// (responds 200 instead of 206) gets treated as sending the whole file
+// again from byte 0, so the .part is truncated and started over rather
+// than getting byte-0 content appended onto existing bytes.
 func httpDownloadFile(url, dest string) error {
-	resp, err := downloadHTTPClient.Get(url)
+	tmp := dest + ".part"
+	var offset int64
+	if fi, err := os.Stat(tmp); err == nil {
+		offset = fi.Size()
+	}
+
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return err
+	}
+	if offset > 0 {
+		req.Header.Set("Range", fmt.Sprintf("bytes=%d-", offset))
+	}
+	resp, err := downloadHTTPClient.Do(req)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
+
+	var out *os.File
+	switch resp.StatusCode {
+	case http.StatusOK:
+		// No partial-content support (or nothing to resume from): the body
+		// is the whole file from byte 0.
+		out, err = os.Create(tmp)
+	case http.StatusPartialContent:
+		out, err = os.OpenFile(tmp, os.O_WRONLY|os.O_APPEND, 0o644)
+	case http.StatusRequestedRangeNotSatisfiable:
+		// Our .part is already >= the real file size - stale or corrupt.
+		// Discard it; the next retry starts clean with no Range header.
+		os.Remove(tmp)
+		return fmt.Errorf("GET %s: range not satisfiable, discarding partial download and retrying from scratch", url)
+	default:
 		return fmt.Errorf("GET %s: %s", url, resp.Status)
 	}
-	tmp := dest + ".part"
-	out, err := os.Create(tmp)
 	if err != nil {
 		return err
 	}
+
 	if _, err := io.Copy(out, resp.Body); err != nil {
 		out.Close()
-		os.Remove(tmp)
+		// Deliberately not removing tmp here: whatever bytes made it to
+		// disk are exactly what the next attempt should resume from.
 		return err
 	}
 	if err := out.Close(); err != nil {
-		os.Remove(tmp)
 		return err
 	}
 	return os.Rename(tmp, dest)
