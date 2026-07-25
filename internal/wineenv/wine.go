@@ -14,5 +14,5 @@ func FindWine() (string, error) {
 	if p, err := exec.LookPath("wine"); err == nil {
 		return p, nil
 	}
-	return "", fmt.Errorf("neither wine64 nor wine found in PATH")
+	return "", fmt.Errorf("neither wine64 nor wine found in PATH (install the wine package)")
 }
