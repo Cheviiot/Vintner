@@ -157,6 +157,8 @@ Error text from internal packages stays in English regardless.
 
 ## Shell completion
 
+Already set up if you installed via Nivora. Otherwise:
+
 ```bash
 source <(vintner completion bash)   # or add to ~/.bashrc
 source <(vintner completion zsh)    # or add to ~/.zshrc
