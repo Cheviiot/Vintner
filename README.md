@@ -1,4 +1,4 @@
-# vintner
+# Vintner
 
 [![CI](https://github.com/Cheviiot/vintner/actions/workflows/ci.yml/badge.svg)](https://github.com/Cheviiot/vintner/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/Cheviiot/vintner)](https://github.com/Cheviiot/vintner/releases/latest)
