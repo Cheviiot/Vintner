@@ -1,6 +1,10 @@
 package wineenv
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 // Values lifted from the original wrappers/cl template
 // (MSVCVER=14.13.26128, SDKVER=10.0.16299.0, ARCH=x86) to cross-check the Go
@@ -52,5 +56,63 @@ func TestNewPathsMatchesOriginalTemplate(t *testing.T) {
 	wantMSBuildBinDir := "/opt/msvc/MSBuild/Current/Bin/amd64"
 	if p.MSBuildBinDir != wantMSBuildBinDir {
 		t.Errorf("MSBuildBinDir mismatch:\n got: %s\nwant: %s", p.MSBuildBinDir, wantMSBuildBinDir)
+	}
+}
+
+// TestFindBaseUnixPerArchWrapper covers install.go's setupWrapperDir
+// layout: dest/bin/<arch>/vintner, with "vc" living at dest/vc - two ".."
+// hops from scriptDir (scriptDir/.. lands on dest/bin, where "vc" isn't,
+// so FindBaseUnix must fall back one more level).
+func TestFindBaseUnixPerArchWrapper(t *testing.T) {
+	dest := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dest, "vc"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	scriptDir := filepath.Join(dest, "bin", "x64")
+	if err := os.MkdirAll(scriptDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := FindBaseUnix(scriptDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != dest {
+		t.Errorf("FindBaseUnix(%q) = %q, want %q (dest/bin/<arch>/vintner case)", scriptDir, got, dest)
+	}
+}
+
+// TestFindBaseUnixSharedWrapper covers install.go's other copy of the
+// binary, dest/bin/vintner (Install's sharedBinary, no per-arch
+// subdirectory) - a single ".." hop from scriptDir already lands on dest,
+// where "vc" is, so no fallback is needed.
+func TestFindBaseUnixSharedWrapper(t *testing.T) {
+	dest := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dest, "vc"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	scriptDir := filepath.Join(dest, "bin")
+	if err := os.MkdirAll(scriptDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := FindBaseUnix(scriptDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != dest {
+		t.Errorf("FindBaseUnix(%q) = %q, want %q (dest/bin/vintner case, no fallback needed)", scriptDir, got, dest)
+	}
+}
+
+func TestToWinPath(t *testing.T) {
+	for _, tc := range []struct{ in, want string }{
+		{"/home/user/.vintner", `z:\home\user\.vintner`},
+		{"/", `z:\`},
+		{"relative/path", `z:relative\path`},
+	} {
+		if got := ToWinPath(tc.in); got != tc.want {
+			t.Errorf("ToWinPath(%q) = %q, want %q", tc.in, got, tc.want)
+		}
 	}
 }
