@@ -80,3 +80,15 @@ func TestNewToolCommandNoTimeoutByDefault(t *testing.T) {
 		t.Error("timedOut() = true for a command that finished well within any reasonable time, with no timeout configured")
 	}
 }
+
+func TestTimeoutMessage(t *testing.T) {
+	t.Setenv("VINTNER_TIMEOUT", "30m")
+	tc, cleanup := newToolCommand("some-tool", "arg1")
+	defer cleanup()
+
+	got := tc.timeoutMessage()
+	want := "vintner: some-tool: timed out after 30m0s (VINTNER_TIMEOUT), killed"
+	if got != want {
+		t.Errorf("timeoutMessage() = %q, want %q", got, want)
+	}
+}
