@@ -20,6 +20,18 @@ type Config struct {
 	DotnetHost string `json:"dotnet_host"` // amd64 or arm64 (.NET tool host dir suffix)
 	MSVCVer    string `json:"msvc_ver"`
 	SDKVer     string `json:"sdk_ver"`
+
+	// PlatformToolset is the short name (e.g. "142", "145") of the one real
+	// compiler generation this install actually shipped - the same value
+	// internal/install's aliasPlatformToolsets found on disk and then
+	// symlinked every historical PlatformToolset name onto. Used by
+	// internal/wrapper's toolchain selection to tell installs apart when
+	// VINTNER_TOOLCHAINS names more than one, so a project pinned to an
+	// older PlatformToolset can be matched against a real install of that
+	// generation instead of always falling back to aliasing. Empty for
+	// installs made before this field existed - re-run `vintner install` on
+	// them to populate it.
+	PlatformToolset string `json:"platform_toolset,omitempty"`
 }
 
 // Load reads env.json from dir (the directory the running binary was

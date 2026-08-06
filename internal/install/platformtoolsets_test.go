@@ -24,8 +24,12 @@ func TestAliasPlatformToolsetsAliasesRealToolset(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := aliasPlatformToolsets(dest); err != nil {
+	real, err := aliasPlatformToolsets(dest)
+	if err != nil {
 		t.Fatalf("aliasPlatformToolsets: %v", err)
+	}
+	if real != "145" {
+		t.Errorf("aliasPlatformToolsets(...) real = %q, want \"145\"", real)
 	}
 
 	for _, n := range wineenv.KnownPlatformToolsets {
@@ -73,7 +77,7 @@ func TestAliasPlatformToolsetsDoesNotOverwriteExisting(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := aliasPlatformToolsets(dest); err != nil {
+	if _, err := aliasPlatformToolsets(dest); err != nil {
 		t.Fatalf("aliasPlatformToolsets: %v", err)
 	}
 
@@ -94,7 +98,7 @@ func TestAliasPlatformToolsetsNoNumericToolset(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := aliasPlatformToolsets(dest); err != nil {
+	if _, err := aliasPlatformToolsets(dest); err != nil {
 		t.Fatalf("aliasPlatformToolsets: %v", err)
 	}
 

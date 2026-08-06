@@ -156,6 +156,48 @@ than one is installed), otherwise defaults to
 `~/.vintner/bin/<host-arch>`, the layout a plain `vintner download &&
 vintner install` with no `--dest` override produces.
 
+## Matching an old project's PlatformToolset (VINTNER_TOOLCHAINS)
+
+vintner only ever downloads one MSVC generation at a time, and a project
+pinned to an older `PlatformToolset` (`v142` from VS2019, say) still builds
+against it — `install` symlinks every historical `PlatformToolset` name onto
+the one real compiler installed, so MSBuild never refuses the project. What
+that can't fix is anything keyed off the *real* compiler version at compile
+time, not the `.vcxproj`'s `PlatformToolset` string — Boost's auto-linking
+being the sharpest example: it names the `.lib` it wants after the actual
+`_MSC_VER`, so a `v142`-pinned project against a newer real compiler can end
+up asking for a `.lib` variant that was never built.
+
+Installing a second, real toolchain of the matching generation fixes that:
+
+```bash
+vintner download --msvc-version 16.11 --accept-license --dest ~/.vintner/toolchain-v142
+vintner install ~/.vintner/toolchain-v142
+```
+
+(`--msvc-version` accepts specific VS releases like `16.11` — MSVC 14.29,
+the last `v142` release — see `vintner download -h`.)
+
+With `VINTNER_TOOLCHAINS` pointing at that install's `bin/<arch>` directory,
+`vintner msbuild` picks it automatically whenever the `.sln`/`.vcxproj`
+being built pins a `PlatformToolset` this second install matches exactly,
+falling back to the default toolchain (with aliasing, as before) otherwise:
+
+```bash
+VINTNER_TOOLCHAINS=~/.vintner/toolchain-v142/bin/x64 vintner msbuild MyOldProject.sln
+```
+
+`VINTNER_TOOLCHAINS` takes a `:`-separated list of `bin/<arch>` directories
+(same granularity as `VINTNER_BIN`), for registering more than one
+alternate. Detection only kicks in when this variable is set, is limited to
+a project that pins exactly one `PlatformToolset` value unambiguously (a
+file pinning different toolsets per configuration, via MSBuild
+`Condition`s, isn't parsed — it's left alone rather than guessed at), and
+needs `install` to have been run against every `--dest` involved (including
+the default one) after this feature shipped, so each has its real
+`PlatformToolset` recorded — re-run `vintner install <dest>` on any older
+install to backfill it.
+
 ## Diagnosing problems (vintner doctor)
 
 ```bash

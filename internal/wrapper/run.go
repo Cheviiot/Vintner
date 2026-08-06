@@ -67,6 +67,14 @@ func Run(tool string, args []string, binDir string) int {
 		scriptDir = filepath.Dir(exePath)
 	}
 
+	if tool == "msbuild" {
+		chosen, note := selectToolchainDir(scriptDir, args)
+		if note != "" {
+			fmt.Fprintln(os.Stderr, note)
+		}
+		scriptDir = chosen
+	}
+
 	cfg, err := wineenv.Load(scriptDir)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "vintner: loading install config:", err)

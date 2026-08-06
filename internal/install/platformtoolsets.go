@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 
 	"github.com/Cheviiot/vintner/internal/wineenv"
 )
@@ -32,32 +33,45 @@ var rePlatformToolsetDir = regexp.MustCompile(`^v(\d+)$`)
 // import version-agnostic files like Microsoft.Cpp.MSVC.Toolset.<arch>.props),
 // so a symlink under any other historical name is a correct, transparent
 // alias rather than a divergent copy.
-func aliasPlatformToolsets(dest string) error {
+//
+// Returns the short name (e.g. "145") of the one real toolset generation
+// found on disk - every schemaDir/archDir combination is expected to agree,
+// since they all describe the same single downloaded compiler, so the first
+// non-empty value wins. Empty if nothing numeric was found anywhere (nothing
+// to alias, and nothing for wineenv.Config.PlatformToolset to record).
+func aliasPlatformToolsets(dest string) (string, error) {
 	schemaDirs, err := filepath.Glob(filepath.Join(dest, "MSBuild", "Microsoft", "VC", "v*"))
 	if err != nil {
-		return err
+		return "", err
 	}
+	var real string
 	for _, schemaDir := range schemaDirs {
 		archDirs, err := filepath.Glob(filepath.Join(schemaDir, "Platforms", "*", "PlatformToolsets"))
 		if err != nil {
-			return err
+			return "", err
 		}
 		for _, toolsetsDir := range archDirs {
-			if err := aliasOneDir(toolsetsDir); err != nil {
-				return err
+			found, err := aliasOneDir(toolsetsDir)
+			if err != nil {
+				return "", err
+			}
+			if real == "" {
+				real = found
 			}
 		}
 	}
-	return nil
+	return real, nil
 }
 
 // aliasOneDir symlinks every name in wineenv.KnownPlatformToolsets that
 // doesn't already exist in toolsetsDir onto whichever real v<N> toolset
-// subdirectory is actually present there.
-func aliasOneDir(toolsetsDir string) error {
+// subdirectory is actually present there, and returns that real subdirectory
+// name's numeric suffix (e.g. "145" for a "v145" directory), or "" if
+// toolsetsDir has no real numeric toolset at all.
+func aliasOneDir(toolsetsDir string) (string, error) {
 	entries, err := os.ReadDir(toolsetsDir)
 	if err != nil {
-		return err
+		return "", err
 	}
 	var real string
 	for _, e := range entries {
@@ -72,7 +86,7 @@ func aliasOneDir(toolsetsDir string) error {
 	if real == "" {
 		// Nothing numeric here (e.g. only the WindowsKernelModeDriver10.0-style
 		// WDK toolsets) - nothing to alias.
-		return nil
+		return "", nil
 	}
 
 	for _, n := range wineenv.KnownPlatformToolsets {
@@ -85,8 +99,8 @@ func aliasOneDir(toolsetsDir string) error {
 			continue
 		}
 		if err := os.Symlink(real, aliasPath); err != nil {
-			return err
+			return "", err
 		}
 	}
-	return nil
+	return strings.TrimPrefix(real, "v"), nil
 }

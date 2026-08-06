@@ -69,7 +69,8 @@ func Install(dest, selfBinary string) error {
 		return err
 	}
 
-	if err := aliasPlatformToolsets(dest); err != nil {
+	realToolset, err := aliasPlatformToolsets(dest)
+	if err != nil {
 		return err
 	}
 
@@ -170,7 +171,7 @@ func Install(dest, selfBinary string) error {
 		if !isFile(clExe) {
 			continue
 		}
-		if err := setupWrapperDir(destBin, selfBinary, arch, host, dotnetHost, msvcVer, sdkVer); err != nil {
+		if err := setupWrapperDir(destBin, selfBinary, arch, host, dotnetHost, msvcVer, sdkVer, realToolset); err != nil {
 			return err
 		}
 		installed++
@@ -311,7 +312,7 @@ func renameHostDirs(binDir string) error {
 // symlink (cl -> vintner) resolves to a binary that's still in the
 // right arch dir; a symlink to a binary one level up (cl -> ../vintner)
 // would not be.
-func setupWrapperDir(destBin, selfBinary, arch, host, dotnetHost, msvcVer, sdkVer string) error {
+func setupWrapperDir(destBin, selfBinary, arch, host, dotnetHost, msvcVer, sdkVer, platformToolset string) error {
 	archDir := filepath.Join(destBin, arch)
 	if err := os.MkdirAll(archDir, 0o755); err != nil {
 		return err
@@ -329,11 +330,12 @@ func setupWrapperDir(destBin, selfBinary, arch, host, dotnetHost, msvcVer, sdkVe
 		}
 	}
 	cfg := &wineenv.Config{
-		Arch:       arch,
-		Host:       host,
-		DotnetHost: dotnetHost,
-		MSVCVer:    msvcVer,
-		SDKVer:     sdkVer,
+		Arch:            arch,
+		Host:            host,
+		DotnetHost:      dotnetHost,
+		MSVCVer:         msvcVer,
+		SDKVer:          sdkVer,
+		PlatformToolset: platformToolset,
 	}
 	return cfg.Save(archDir)
 }
