@@ -69,9 +69,67 @@ func TestE2ECompilesAndRunsRealProgram(t *testing.T) {
 		t.Fatalf("expected a compiled %s to exist after `cl` exited 0: %v", exe, err)
 	}
 
+	gotExitCode, out := runUnderWine(t, exe)
+	if gotExitCode != wantExitCode {
+		t.Errorf("compiled program exit code = %d, want %d (output: %s)", gotExitCode, wantExitCode, out)
+	}
+	if !strings.Contains(out, wantOutput) {
+		t.Errorf("compiled program output = %q, want it to contain %q", out, wantOutput)
+	}
+}
+
+// TestE2ECompileThenLinkSeparately covers `vintner link` on its own -
+// TestE2ECompilesAndRunsRealProgram only exercises link.exe indirectly
+// (cl.exe invokes it itself to go from .obj to .exe), never the separate
+// Run("link", ...) path a real two-step build (compile every .c to .obj,
+// then one link.exe invocation) actually uses - a different tool spec
+// entry (dirBin vs cl's own filters/post-processing) that nothing else
+// here touches at all.
+func TestE2ECompileThenLinkSeparately(t *testing.T) {
+	binDir := e2eBinDir(t)
+	dir := t.TempDir()
+
+	src := filepath.Join(dir, "hello.c")
+	const wantOutput = "hello from vintner link e2e"
+	const wantExitCode = 7
+	program := "#include <stdio.h>\nint main(void) { printf(\"" + wantOutput + "\\n\"); return " + strconv.Itoa(wantExitCode) + "; }\n"
+	if err := os.WriteFile(src, []byte(program), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	obj := filepath.Join(dir, "hello.obj")
+	if code := Run("cl", []string{"/nologo", "/c", "/Fo" + obj, src}, binDir); code != 0 {
+		t.Fatalf("vintner cl /c exited %d compiling %s", code, src)
+	}
+	if _, err := os.Stat(obj); err != nil {
+		t.Fatalf("expected %s to exist after `cl /c` exited 0: %v", obj, err)
+	}
+
+	exe := filepath.Join(dir, "hello.exe")
+	if code := Run("link", []string{"/nologo", "/out:" + exe, obj}, binDir); code != 0 {
+		t.Fatalf("vintner link exited %d linking %s (see test output above for linker errors)", code, obj)
+	}
+	if fi, err := os.Stat(exe); err != nil || fi.IsDir() {
+		t.Fatalf("expected a linked %s to exist after `link` exited 0: %v", exe, err)
+	}
+
+	gotExitCode, out := runUnderWine(t, exe)
+	if gotExitCode != wantExitCode {
+		t.Errorf("linked program exit code = %d, want %d (output: %s)", gotExitCode, wantExitCode, out)
+	}
+	if !strings.Contains(out, wantOutput) {
+		t.Errorf("linked program output = %q, want it to contain %q", out, wantOutput)
+	}
+}
+
+// runUnderWine runs exe under wine and returns its exit code and combined
+// stdout+stderr, failing the test outright (rather than returning an error)
+// if wine itself can't be found or the process can't be started at all.
+func runUnderWine(t *testing.T, exe string) (exitCode int, output string) {
+	t.Helper()
 	wineBin, err := wineenv.FindWine()
 	if err != nil {
-		t.Fatalf("finding wine to run the compiled binary: %v", err)
+		t.Fatalf("finding wine to run %s: %v", exe, err)
 	}
 	cmd := exec.Command(wineBin, exe)
 	cmd.Env = append(os.Environ(), "WINEDEBUG=-all")
@@ -79,19 +137,12 @@ func TestE2ECompilesAndRunsRealProgram(t *testing.T) {
 	cmd.Stdout = &out
 	cmd.Stderr = &out
 	runErr := cmd.Run()
-
-	gotExitCode := 0
-	if runErr != nil {
-		exitErr, ok := runErr.(*exec.ExitError)
-		if !ok {
-			t.Fatalf("running compiled %s under wine: %v (output: %s)", exe, runErr, out.String())
-		}
-		gotExitCode = exitErr.ExitCode()
+	if runErr == nil {
+		return 0, out.String()
 	}
-	if gotExitCode != wantExitCode {
-		t.Errorf("compiled program exit code = %d, want %d (output: %s)", gotExitCode, wantExitCode, out.String())
+	exitErr, ok := runErr.(*exec.ExitError)
+	if !ok {
+		t.Fatalf("running %s under wine: %v (output: %s)", exe, runErr, out.String())
 	}
-	if !strings.Contains(out.String(), wantOutput) {
-		t.Errorf("compiled program output = %q, want it to contain %q", out.String(), wantOutput)
-	}
+	return exitErr.ExitCode(), out.String()
 }
