@@ -1,6 +1,10 @@
 package i18n
 
 import (
+	"io/fs"
+	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -56,6 +60,58 @@ func TestCatalogCompleteness(t *testing.T) {
 		if !hasRU || strings.TrimSpace(ru) == "" {
 			t.Errorf("catalog[%q] has no (non-empty) Russian translation", key)
 		}
+	}
+}
+
+var reTCallSite = regexp.MustCompile(`i18n\.T\("([a-zA-Z0-9_.]+)"`)
+
+// TestEveryCallSiteKeyExistsInCatalog scans every .go file in the module
+// (from the repo root, two levels up from this package) for a call to T
+// with a literal string key and checks each key is actually present in
+// catalog. T()'s own fallback for a missing key (TestTMissingKeyReturns
+// KeyItself) is to quietly return the raw key string instead of a real
+// translation - a typo'd key at a call site compiles fine and only shows
+// up as garbled untranslated text in the running CLI, nothing else catches
+// it (TestCatalogCompleteness only checks EN/RU are both present *within*
+// whatever's already in catalog, not that every real call site has an
+// entry there at all).
+func TestEveryCallSiteKeyExistsInCatalog(t *testing.T) {
+	root := filepath.Join("..", "..")
+	seen := map[string]bool{}
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if d.Name() == ".git" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") {
+			return nil
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		for _, m := range reTCallSite.FindAllStringSubmatch(string(data), -1) {
+			key := m[1]
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			if _, ok := catalog[key]; !ok {
+				t.Errorf("%s: i18n.T(%q) - key not found in catalog", path, key)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(seen) < 15 { // sanity check: the walk/regex didn't silently find nothing
+		t.Fatalf("only found %d distinct i18n.T call sites across the module - the scan likely needs updating (wrong root, or T's call pattern changed): %v", len(seen), seen)
 	}
 }
 
