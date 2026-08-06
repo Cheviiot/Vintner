@@ -10,6 +10,10 @@ import "syscall"
 // process-group cleanup setNewProcessGroup already provides.
 type cgroupHandle struct{}
 
+// CgroupCleanupAvailable always reports false here - see cgroup.go's doc
+// comment on the linux implementation.
+func CgroupCleanupAvailable() bool { return false }
+
 func newCgroup() *cgroupHandle                          { return nil }
 func (h *cgroupHandle) apply(attr *syscall.SysProcAttr) {}
 func (h *cgroupHandle) kill()                           {}

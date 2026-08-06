@@ -10,6 +10,7 @@ import (
 
 	"github.com/Cheviiot/vintner/internal/i18n"
 	"github.com/Cheviiot/vintner/internal/wineenv"
+	"github.com/Cheviiot/vintner/internal/wrapper"
 )
 
 // runDoctor checks the pieces vintner actually needs at runtime - wine
@@ -72,6 +73,12 @@ func (d *doctorReport) checkWine() {
 		return
 	}
 	d.ok("runs: %s", trimNewline(string(out)))
+
+	if wrapper.CgroupCleanupAvailable() {
+		d.ok("cgroup cleanup: available (guarantees cleanup of Wine-hosted workers that detach into their own Unix session, e.g. via setsid() - see msbuildNodeReuseArgs in internal/wrapper/msbuildenv.go)")
+	} else {
+		d.warn("cgroup cleanup: not available (cgroup v2 not delegated here - common in some containers) - falls back to process-group-only cleanup, which can't reach a Wine-hosted worker that detaches into its own Unix session")
+	}
 }
 
 func (d *doctorReport) checkExtractionTools() {

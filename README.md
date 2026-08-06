@@ -205,8 +205,11 @@ vintner doctor
 ```
 
 Checks the things vintner actually needs at runtime — that `wine`/`wine64`
-is on `PATH` and actually runs, that `msitools`/`cabextract` are present,
-and that every installed `<dest>/bin/<arch>` toolchain (or the one
+is on `PATH` and actually runs, whether cgroup v2 cleanup is available
+(a `[warn]`, not a `[FAIL]`, if not — builds still work, but a wedged
+Wine-hosted worker that detaches into its own Unix session, e.g. via
+`setsid()`, may not get fully cleaned up), that `msitools`/`cabextract` are
+present, and that every installed `<dest>/bin/<arch>` toolchain (or the one
 `VINTNER_BIN` points at) has its MSVC/SDK/MSBuild directories in place —
 and prints a pass/fail checklist. Exits non-zero if anything failed.
 Useful before filing a bug, or after a `download`/`install` that seemed to

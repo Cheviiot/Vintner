@@ -41,6 +41,24 @@ type cgroupHandle struct {
 	f   *os.File
 }
 
+// CgroupCleanupAvailable reports whether this process can actually create
+// and use a cgroup v2 child - i.e. whether the guaranteed cleanup
+// cgroupHandle provides (see its doc comment) is really in effect here,
+// rather than every wine-hosted tool invocation silently falling back to
+// process-group-only cleanup. Used by `vintner doctor` to surface that
+// degradation instead of leaving it invisible. Does a real create-then-
+// close probe rather than just checking for a v2 mount, since delegation
+// (write access) is what actually varies between environments - common in
+// containers without cgroup delegation, for example.
+func CgroupCleanupAvailable() bool {
+	h := newCgroup()
+	if h == nil {
+		return false
+	}
+	h.close()
+	return true
+}
+
 // newCgroup creates a fresh child cgroup under vintner's own (delegated)
 // cgroup and returns a handle ready for apply(), or nil if that isn't
 // possible here.

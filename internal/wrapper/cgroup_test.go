@@ -19,6 +19,22 @@ func TestCgroupHandleNilSafety(t *testing.T) {
 	h.close()                       // must not panic
 }
 
+// TestCgroupCleanupAvailableMatchesNewCgroup checks CgroupCleanupAvailable
+// (what `vintner doctor` reports) agrees with newCgroup's own success/
+// failure in this environment, and that it doesn't leak the probe cgroup
+// it creates to answer that question.
+func TestCgroupCleanupAvailableMatchesNewCgroup(t *testing.T) {
+	probe := newCgroup()
+	wantAvailable := probe != nil
+	if probe != nil {
+		probe.close()
+	}
+
+	if got := CgroupCleanupAvailable(); got != wantAvailable {
+		t.Errorf("CgroupCleanupAvailable() = %v, want %v (newCgroup() != nil)", got, wantAvailable)
+	}
+}
+
 func requireCgroup(t *testing.T) *cgroupHandle {
 	t.Helper()
 	h := newCgroup()
