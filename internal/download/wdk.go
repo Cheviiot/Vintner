@@ -246,7 +246,10 @@ func extractNuGetPackageDir(nupkgFile, prefix, dest string) error {
 		if rel == "" {
 			continue
 		}
-		target := filepath.Join(dest, rel)
+		target, err := safeJoin(dest, rel)
+		if err != nil {
+			return fmt.Errorf("extracting %s: %w", nupkgFile, err)
+		}
 		if f.FileInfo().IsDir() {
 			if err := os.MkdirAll(target, 0o755); err != nil {
 				return err

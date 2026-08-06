@@ -6,6 +6,47 @@ import (
 	"testing"
 )
 
+func TestExtractNuGetPackageDirRejectsZipSlip(t *testing.T) {
+	dest := t.TempDir()
+	nupkgPath := filepath.Join(t.TempDir(), "evil.nupkg")
+	writeTestZip(t, nupkgPath, map[string]string{
+		"c/build/native/include/ok.h": "fine",
+		"c/../../../escape.txt":       "should never be written",
+	})
+
+	err := extractNuGetPackageDir(nupkgPath, "c/", dest)
+	if err == nil {
+		t.Fatal("expected an error extracting a zip entry that traverses outside dest, got nil")
+	}
+	illegal := filepath.Join(dest, "../../../escape.txt")
+	if _, statErr := os.Stat(illegal); statErr == nil {
+		t.Errorf("zip-slip entry was actually written to %s - traversal was not prevented", illegal)
+	}
+}
+
+func TestExtractNuGetPackageDirStripsPrefix(t *testing.T) {
+	dest := t.TempDir()
+	nupkgPath := filepath.Join(t.TempDir(), "fine.nupkg")
+	writeTestZip(t, nupkgPath, map[string]string{
+		"c/build/native/include/ok.h": "fine",
+		"other/ignored.txt":           "not under prefix, skipped",
+	})
+
+	if err := extractNuGetPackageDir(nupkgPath, "c/", dest); err != nil {
+		t.Fatalf("extracting a well-behaved nupkg should not fail: %v", err)
+	}
+	got, err := os.ReadFile(filepath.Join(dest, "build", "native", "include", "ok.h"))
+	if err != nil {
+		t.Fatalf("expected prefix-stripped path to exist: %v", err)
+	}
+	if string(got) != "fine" {
+		t.Errorf("content = %q, want %q", got, "fine")
+	}
+	if _, err := os.Stat(filepath.Join(dest, "ignored.txt")); err == nil {
+		t.Error("an entry outside prefix should have been skipped, not extracted")
+	}
+}
+
 func TestWDKNuGetID(t *testing.T) {
 	for _, tc := range []struct{ arch, want string }{
 		{"x64", "Microsoft.Windows.WDK.x64"},
