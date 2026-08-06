@@ -1,7 +1,9 @@
 package download
 
 import (
+	"bytes"
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -224,6 +226,83 @@ func TestExpandSelectionDeterministic(t *testing.T) {
 				t.Fatalf("run %d: order changed: got %v, want %v", i, gotIDs, want)
 			}
 		}
+	}
+}
+
+// TestPrintDependencyTreeDefaultShowsRequiredAndRecommendedNotOptional
+// pins down PrintDependencyTree's filtering (the --print-deps-tree CLI
+// flag's whole implementation) against the exact same
+// Optional/Recommended semantics collectDependencyClosure enforces for a
+// real download: Optional deps need opts.IncludeOptional, Recommended
+// ones are included unless opts.SkipRecommended - zero-value opts (no
+// flags passed) means Optional excluded, Recommended included.
+func TestPrintDependencyTreeDefaultShowsRequiredAndRecommendedNotOptional(t *testing.T) {
+	idx := fixtureIndex(t, "x86")
+	opts := &Options{
+		Package:      []string{"Microsoft.VisualStudio.Workload.VCTools"},
+		Architecture: []string{"x86"},
+	}
+	var buf bytes.Buffer
+	PrintDependencyTree(&buf, idx, opts)
+	out := buf.String()
+
+	for _, want := range []string{
+		"Microsoft.VisualStudio.Workload.VCTools",
+		"Microsoft.VisualStudio.Component.VC.Tools.x86.x64",
+		"Microsoft.VC.Tools.Core",
+		"Microsoft.VC.Tools.Recommended",
+		"[Recommended]",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("tree output missing %q, got:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "Microsoft.VC.Tools.Optional") {
+		t.Errorf("tree output should exclude the Optional dependency by default, got:\n%s", out)
+	}
+}
+
+func TestPrintDependencyTreeIncludeOptionalShowsIt(t *testing.T) {
+	idx := fixtureIndex(t, "x86")
+	opts := &Options{
+		Package:         []string{"Microsoft.VisualStudio.Workload.VCTools"},
+		Architecture:    []string{"x86"},
+		IncludeOptional: true,
+	}
+	var buf bytes.Buffer
+	PrintDependencyTree(&buf, idx, opts)
+	out := buf.String()
+	if !strings.Contains(out, "Microsoft.VC.Tools.Optional") || !strings.Contains(out, "[Optional]") {
+		t.Errorf("expected the Optional dependency (annotated [Optional]) with IncludeOptional set, got:\n%s", out)
+	}
+}
+
+func TestPrintDependencyTreeRespectsIgnore(t *testing.T) {
+	idx := fixtureIndex(t, "x86")
+	opts := &Options{
+		Package:      []string{"Microsoft.VisualStudio.Workload.VCTools"},
+		Architecture: []string{"x86"},
+		Ignore:       []string{"microsoft.vc.tools.core"}, // Ignore matching is case-insensitive
+	}
+	var buf bytes.Buffer
+	PrintDependencyTree(&buf, idx, opts)
+	out := buf.String()
+	if strings.Contains(out, "Microsoft.VC.Tools.Core") {
+		t.Errorf("ignored package should not appear in the tree, got:\n%s", out)
+	}
+	if !strings.Contains(out, "Microsoft.VisualStudio.Component.VC.Tools.x86.x64") {
+		t.Errorf("non-ignored ancestor should still appear, got:\n%s", out)
+	}
+}
+
+func TestPrintDependencyTreeUnknownTargetMarkedNotFound(t *testing.T) {
+	idx := fixtureIndex(t, "x86")
+	opts := &Options{Package: []string{"Some.Package.That.Does.Not.Exist"}}
+	var buf bytes.Buffer
+	PrintDependencyTree(&buf, idx, opts)
+	out := buf.String()
+	if !strings.Contains(out, "Some.Package.That.Does.Not.Exist (not found)") {
+		t.Errorf("expected an explicit (not found) marker for an unresolvable package, got:\n%s", out)
 	}
 }
 
