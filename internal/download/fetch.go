@@ -186,6 +186,18 @@ func httpDownloadFile(url, dest string) error {
 		// is the whole file from byte 0.
 		out, err = os.Create(tmp)
 	case http.StatusPartialContent:
+		// A 206 on its own doesn't prove the server actually started the
+		// body where we asked: verify Content-Range agrees with offset
+		// before trusting the body as a continuation of tmp. Blindly
+		// appending a body that started somewhere else - or omitted
+		// Content-Range entirely, which a real 206 always has - would
+		// silently corrupt tmp rather than just failing the eventual
+		// sha256 check a bit more slowly (tryDownloadPayload, fetch.go).
+		if start, ok := contentRangeStart(resp.Header.Get("Content-Range")); !ok || start != offset {
+			os.Remove(tmp)
+			return fmt.Errorf("GET %s: got 206 Partial Content with Content-Range %q, expected it to start at the requested offset %d - discarding partial download and retrying from scratch",
+				url, resp.Header.Get("Content-Range"), offset)
+		}
 		out, err = os.OpenFile(tmp, os.O_WRONLY|os.O_APPEND, 0o644)
 	case http.StatusRequestedRangeNotSatisfiable:
 		// Our .part is already >= the real file size - stale or corrupt.
@@ -209,6 +221,17 @@ func httpDownloadFile(url, dest string) error {
 		return err
 	}
 	return os.Rename(tmp, dest)
+}
+
+// contentRangeStart parses the start byte offset from a "Content-Range:
+// bytes <start>-<end>/<total>" response header (RFC 9110 §14.4), reporting
+// ok=false if it's missing or doesn't match that format.
+func contentRangeStart(header string) (int64, bool) {
+	var start int64
+	if _, err := fmt.Sscanf(header, "bytes %d-", &start); err != nil {
+		return 0, false
+	}
+	return start, true
 }
 
 func sha256File(path string) (string, error) {

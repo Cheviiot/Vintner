@@ -104,6 +104,36 @@ func TestHTTPDownloadFileRestartsWhenServerIgnoresRange(t *testing.T) {
 	}
 }
 
+func TestHTTPDownloadFileRejectsMismatchedContentRange(t *testing.T) {
+	const body = "the quick brown fox jumps over the lazy dog"
+	const partial = "the quick "
+	// Answers every Range request with 206, but a Content-Range claiming a
+	// start byte that doesn't match what was actually requested - a
+	// misbehaving proxy/CDN, or one that ignores Range but still (wrongly)
+	// reports 206 with a stale/default Content-Range.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Range", "bytes 0-"+strconv.Itoa(len(body)-1)+"/"+strconv.Itoa(len(body)))
+		w.WriteHeader(http.StatusPartialContent)
+		fmt.Fprint(w, body[len(partial):]) // wrong body for the (wrong) advertised range too
+	}))
+	defer srv.Close()
+
+	dest := filepath.Join(t.TempDir(), "out")
+	if err := os.WriteFile(dest+".part", []byte(partial), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := httpDownloadFile(srv.URL, dest); err == nil {
+		t.Fatal("expected an error from the mismatched Content-Range")
+	}
+	if _, err := os.Stat(dest + ".part"); !os.IsNotExist(err) {
+		t.Error("expected the now-suspect .part to be discarded, not left in place (or worse, corrupted with the mismatched body appended)")
+	}
+	if _, err := os.Stat(dest); err == nil {
+		t.Error("dest should not exist after a rejected mismatched-range response")
+	}
+}
+
 func TestHTTPDownloadFileKeepsPartOnMidTransferFailure(t *testing.T) {
 	const fullBody = "0123456789"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
