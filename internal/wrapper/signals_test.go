@@ -19,7 +19,7 @@ func TestForwardSignalsKillsChild(t *testing.T) {
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("starting sleep: %v", err)
 	}
-	stop := forwardSignals(cmd.Process)
+	stop := forwardSignals(&toolCommand{Cmd: cmd})
 	defer stop()
 
 	// signal.Notify (inside forwardSignals) intercepts this rather than

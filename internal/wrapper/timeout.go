@@ -48,41 +48,52 @@ type toolCommand struct {
 	ctx     context.Context
 	cancel  context.CancelFunc
 	timeout time.Duration // 0 if VINTNER_TIMEOUT wasn't set
+	cg      *cgroupHandle // nil if cgroups aren't usable here
 }
 
 // newToolCommand builds a toolCommand: its own process group
-// (setNewProcessGroup) and, when VINTNER_TIMEOUT is set, a deadline that
-// kills the *whole group* - not just the immediate `wine` process, since a
-// wedged Wine-hosted child surviving past its parent is exactly the
-// scenario this needs to reach - if the tool hasn't finished in time.
+// (setNewProcessGroup) plus, where available, a cgroup (see cgroup.go) -
+// and, when VINTNER_TIMEOUT is set, a deadline that kills through both -
+// not just the immediate `wine` process, since a wedged Wine-hosted child
+// surviving past its parent is exactly the scenario this needs to reach -
+// if the tool hasn't finished in time.
 //
 // Callers must defer the returned cleanup func, and should call
 // timedOut() after Wait() returns to tell a timeout-triggered kill apart
 // from every other failure.
 func newToolCommand(name string, args ...string) (tc *toolCommand, cleanup func()) {
+	cg := newCgroup()
 	timeout := commandTimeout()
 	if timeout <= 0 {
 		cmd := exec.Command(name, args...)
 		setNewProcessGroup(cmd)
-		return &toolCommand{Cmd: cmd, ctx: context.Background()}, func() {}
+		cg.apply(cmd.SysProcAttr)
+		return &toolCommand{Cmd: cmd, ctx: context.Background(), cg: cg}, func() { cg.close() }
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	cmd := exec.CommandContext(ctx, name, args...)
 	setNewProcessGroup(cmd)
+	cg.apply(cmd.SysProcAttr)
 	// cmd.Cancel's default (Go 1.20+) only signals the immediate child;
 	// override it to reach the whole process group, same as
 	// forwardSignals - the wedged process a timeout exists to clean up is
-	// typically under wine, not wine itself.
+	// typically under wine, not wine itself. cg.kill() is a second,
+	// guaranteed-reach mechanism on top of that: a Wine-hosted process
+	// created with CREATE_NO_WINDOW (an ordinary background worker, e.g.
+	// an MSBuild node-reuse node) gets setsid()'d by Wine's ntdll before
+	// exec, moving it into a brand new Unix process group the kill below
+	// can never reach - see cgroup.go's doc comment for the full chain.
 	cmd.Cancel = func() error {
-		if cmd.Process == nil {
-			return nil
+		if cmd.Process != nil {
+			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 		}
-		return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		cg.kill()
+		return nil
 	}
 	cmd.WaitDelay = waitDelay
-	tc = &toolCommand{Cmd: cmd, ctx: ctx, cancel: cancel, timeout: timeout}
-	return tc, cancel
+	tc = &toolCommand{Cmd: cmd, ctx: ctx, cancel: cancel, timeout: timeout, cg: cg}
+	return tc, func() { cancel(); cg.close() }
 }
 
 // timedOut reports whether this command was killed by its own

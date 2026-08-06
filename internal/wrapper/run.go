@@ -174,7 +174,7 @@ func runViaToolRelay(wineBin, relayExe, exePath string, args []string, paths *wi
 		fmt.Fprintln(os.Stderr, "vintner:", err)
 		return 1
 	}
-	stopSignals := forwardSignals(tc.Process)
+	stopSignals := forwardSignals(tc)
 	defer stopSignals()
 
 	var wg sync.WaitGroup
@@ -237,7 +237,7 @@ func runRawStdout(tc *toolCommand) int {
 		fmt.Fprintln(os.Stderr, "vintner:", err)
 		return 1
 	}
-	stopSignals := forwardSignals(tc.Process)
+	stopSignals := forwardSignals(tc)
 	defer stopSignals()
 
 	doneOut := make(chan struct{})
@@ -317,7 +317,7 @@ func runFiltered(tc *toolCommand, stdoutF, stderrF lineFilter) int {
 		fmt.Fprintln(os.Stderr, "vintner:", err)
 		return 1
 	}
-	stopSignals := forwardSignals(tc.Process)
+	stopSignals := forwardSignals(tc)
 	defer stopSignals()
 
 	doneOut := make(chan struct{})

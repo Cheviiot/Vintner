@@ -27,20 +27,22 @@ func setNewProcessGroup(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 }
 
-// forwardSignals relays SIGINT/SIGTERM received by vintner itself to
-// proc's entire process group (proc must have been started via a cmd that
-// called setNewProcessGroup, making proc.Pid also the group id), escalating
-// to SIGKILL after killGrace if the group hasn't exited by then. Callers
-// must call the returned stop func once the process has actually exited
-// (e.g. right after cmd.Wait() returns), both to stop listening for
+// forwardSignals relays SIGINT/SIGTERM received by vintner itself to tc's
+// entire process group (tc.Process must have been started via
+// setNewProcessGroup, making tc.Process.Pid also the group id), escalating
+// after killGrace to a SIGKILL of that group plus - if tc.cg is non-nil - a
+// cgroup kill, which alone is guaranteed to reach a Wine-hosted worker that
+// setsid()'d itself out of the process group (see cgroup.go's doc comment).
+// Callers must call the returned stop func once the process has actually
+// exited (e.g. right after cmd.Wait() returns), both to stop listening for
 // signals and to cancel a pending escalation.
-func forwardSignals(proc *os.Process) (stop func()) {
+func forwardSignals(tc *toolCommand) (stop func()) {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	done := make(chan struct{})
 
 	go func() {
-		pgid := -proc.Pid
+		pgid := -tc.Process.Pid
 		for {
 			select {
 			case sig := <-sigCh:
@@ -52,6 +54,7 @@ func forwardSignals(proc *os.Process) (stop func()) {
 				select {
 				case <-time.After(killGrace):
 					_ = syscall.Kill(pgid, syscall.SIGKILL)
+					tc.cg.kill()
 				case <-done:
 					return
 				}
