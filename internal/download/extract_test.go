@@ -1,10 +1,33 @@
 package download
 
 import (
+	"archive/zip"
 	"os"
 	"path/filepath"
 	"testing"
 )
+
+func writeTestZip(t *testing.T, path string, entries map[string]string) {
+	t.Helper()
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	w := zip.NewWriter(f)
+	for name, content := range entries {
+		fw, err := w.Create(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := fw.Write([]byte(content)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func writeFile(t *testing.T, path, content string) {
 	t.Helper()
@@ -148,5 +171,46 @@ func TestCopyRedirectedAssembliesSkipsMissingTarget(t *testing.T) {
 
 	if err := CopyRedirectedAssemblies(app); err != nil {
 		t.Fatalf("a redirect pointing at a nonexistent file should be silently skipped, got: %v", err)
+	}
+}
+
+func TestExtractVSIXPackageRejectsZipSlip(t *testing.T) {
+	dest := t.TempDir()
+	zipPath := filepath.Join(t.TempDir(), "evil.vsix")
+	writeTestZip(t, zipPath, map[string]string{
+		"Contents/foo.txt":    "fine",
+		"../../../escape.txt": "should never be written",
+	})
+
+	err := extractVSIXPackage(zipPath, dest, filepath.Join(dest, "listing.txt"))
+	if err == nil {
+		t.Fatal("expected an error extracting a zip entry that traverses outside the destination, got nil")
+	}
+
+	// Exactly where the traversal would have landed, had it not been
+	// rejected: dest/vsix (extractVSIXPackage's own scratch dir) joined
+	// with the malicious entry name.
+	illegal := filepath.Join(dest, "vsix", "../../../escape.txt")
+	if _, statErr := os.Stat(illegal); statErr == nil {
+		t.Errorf("zip-slip entry was actually written to %s - traversal was not prevented", illegal)
+	}
+}
+
+func TestExtractVSIXPackageAllowsNormalEntries(t *testing.T) {
+	dest := t.TempDir()
+	zipPath := filepath.Join(t.TempDir(), "fine.vsix")
+	writeTestZip(t, zipPath, map[string]string{
+		"Contents/foo/bar.txt": "hello",
+	})
+
+	if err := extractVSIXPackage(zipPath, dest, filepath.Join(dest, "listing.txt")); err != nil {
+		t.Fatalf("extracting a well-behaved VSIX should not fail: %v", err)
+	}
+	got, err := os.ReadFile(filepath.Join(dest, "foo", "bar.txt"))
+	if err != nil {
+		t.Fatalf("expected Contents/foo/bar.txt to land at dest/foo/bar.txt: %v", err)
+	}
+	if string(got) != "hello" {
+		t.Errorf("content = %q, want %q", got, "hello")
 	}
 }

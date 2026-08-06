@@ -71,7 +71,10 @@ func extractVSIXPackage(file, dest, listingPath string) error {
 		if err != nil {
 			name = f.Name
 		}
-		target := filepath.Join(tmp, name)
+		target, err := safeJoin(tmp, name)
+		if err != nil {
+			return fmt.Errorf("extracting %s: %w", file, err)
+		}
 		if f.FileInfo().IsDir() {
 			if err := os.MkdirAll(target, 0o755); err != nil {
 				return err
@@ -101,6 +104,20 @@ func extractVSIXPackage(file, dest, listingPath string) error {
 		}
 	}
 	return os.RemoveAll(tmp)
+}
+
+// safeJoin joins base and name, rejecting the result if it would resolve
+// outside base ("zip slip": archive/zip doesn't sanitize entry names
+// itself, so a malicious/malformed VSIX with an entry like
+// "../../../../home/user/.bashrc" would otherwise write wherever the zip
+// says to via a plain filepath.Join).
+func safeJoin(base, name string) (string, error) {
+	target := filepath.Join(base, name)
+	rel, err := filepath.Rel(base, target)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("zip entry %q escapes extraction directory %s", name, base)
+	}
+	return target, nil
 }
 
 func extractZipEntry(f *zip.File, dest string) error {
