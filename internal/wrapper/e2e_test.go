@@ -57,7 +57,12 @@ func TestE2ECompilesAndRunsRealProgram(t *testing.T) {
 	}
 
 	exe := filepath.Join(dir, "hello.exe")
-	if code := Run("cl", []string{"/nologo", "/Fe" + exe, src}, binDir); code != 0 {
+	// cl.exe with no /Fo writes the .obj into its own process's current
+	// working directory, not next to the source or /Fe's exe - which,
+	// since Run() doesn't set exec.Cmd.Dir, inherits this test binary's
+	// cwd (the package source directory). Pin it explicitly into dir so a
+	// stray hello.obj doesn't get left behind in the repo.
+	if code := Run("cl", []string{"/nologo", "/Fe" + exe, "/Fo" + dir + string(filepath.Separator), src}, binDir); code != 0 {
 		t.Fatalf("vintner cl exited %d compiling %s (see test output above for compiler errors)", code, src)
 	}
 	if fi, err := os.Stat(exe); err != nil || fi.IsDir() {
