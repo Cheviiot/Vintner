@@ -30,6 +30,34 @@ func TestClPostProcessRewritesLineDirectivesInPreprocessedOutput(t *testing.T) {
 	}
 }
 
+// TestClPostProcessRewritesLineDirectiveWithoutZDrivePrefix covers a
+// second real shape confirmed against an actual `cl /P` run under wine
+// (11.3, MSVC 14.51): an SDK header pulled in via INCLUDE can come back
+// as a plain unix-style absolute path with no "z:" prefix at all - Wine's
+// own path canonicalization doesn't always preserve the z:\... notation
+// it was given - while still escaping the last separator as a doubled
+// backslash. stripFirstZDrive is a no-op here (nothing to strip), but the
+// backslash->slash rewrite must still apply.
+func TestClPostProcessRewritesLineDirectiveWithoutZDrivePrefix(t *testing.T) {
+	dir := t.TempDir()
+	fi := filepath.Join(dir, "out.i")
+	input := "#line 1 \"/home/user/.vintner/toolchain/kits/10/include/10.0.26100.0/ucrt\\\\stdio.h\"\r\n"
+	if err := os.WriteFile(fi, []byte(input), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	clPostProcess([]string{"/P", "/Fi" + fi, "hello.c"})
+
+	got, err := os.ReadFile(fi)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "#line 1 \"/home/user/.vintner/toolchain/kits/10/include/10.0.26100.0/ucrt/stdio.h\"\n"
+	if string(got) != want {
+		t.Errorf("clPostProcess output = %q, want %q", got, want)
+	}
+}
+
 func TestClPostProcessNoopWithoutP(t *testing.T) {
 	dir := t.TempDir()
 	fi := filepath.Join(dir, "out.i")
