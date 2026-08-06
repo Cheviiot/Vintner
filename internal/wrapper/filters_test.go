@@ -34,6 +34,22 @@ func TestClStdoutFilterNoteLine(t *testing.T) {
 	}
 }
 
+// TestClStdoutFilterErrorLineForwardSlash covers the shape confirmed
+// against a real `cl` run under wine (11.3, MSVC 14.51) with an absolute
+// source path: cl.exe echoes the path back with whatever separator it was
+// given, and RewriteArgs (rewrite.go) itself always produces "z:" +
+// forward-slash unix paths (prefix+"z:"+path, path being the original
+// unix argument) - so this forward-slash shape is actually the *more*
+// realistic one for vintner's own invocations, not just a hypothetical
+// alternative to the backslash form every other test here covers.
+func TestClStdoutFilterErrorLineForwardSlash(t *testing.T) {
+	in := `z:/home/user/project/test.c(5): warning C4996: 'foo' was declared deprecated`
+	want := `/home/user/project/test.c(5): warning C4996: 'foo' was declared deprecated`
+	if got := clStdoutFilter(in); got != want {
+		t.Errorf("got %q want %q", got, want)
+	}
+}
+
 func TestClStdoutFilterPassthrough(t *testing.T) {
 	in := "test.c"
 	if got := clStdoutFilter(in); got != in {
