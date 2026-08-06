@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"runtime"
+	"testing"
+)
 
 // TestRunDownloadRejectsInvalidArchFlags exercises the validation added
 // after the flags are parsed, which must reject typos before runDownload
@@ -36,5 +39,40 @@ func TestValidArchitectureSets(t *testing.T) {
 	}
 	if validHostArchs["arm"] {
 		t.Error(`validHostArchs["arm"] = true, want false (no 32-bit ARM host toolchain exists)`)
+	}
+}
+
+func TestContains(t *testing.T) {
+	list := []string{"x86", "x64", "arm64"}
+	for _, tc := range []struct {
+		v    string
+		want bool
+	}{
+		{"x64", true},
+		{"arm64", true},
+		{"arm", false},
+		{"", false},
+	} {
+		if got := contains(list, tc.v); got != tc.want {
+			t.Errorf("contains(%v, %q) = %v, want %v", list, tc.v, got, tc.want)
+		}
+	}
+	if contains(nil, "x64") {
+		t.Error("contains(nil, ...) = true, want false")
+	}
+}
+
+// TestDetectHostArch can't exercise both branches (runtime.GOARCH is fixed
+// for the whole build, not something a test can swap), but it does pin
+// down that the function's result actually agrees with the real GOARCH
+// this test binary was built for, rather than e.g. always returning "x64"
+// unconditionally.
+func TestDetectHostArch(t *testing.T) {
+	want := "x64"
+	if runtime.GOARCH == "arm64" {
+		want = "arm64"
+	}
+	if got := detectHostArch(); got != want {
+		t.Errorf("detectHostArch() = %q, want %q (runtime.GOARCH = %q)", got, want, runtime.GOARCH)
 	}
 }
