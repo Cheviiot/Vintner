@@ -99,6 +99,7 @@ func Run(tool string, args []string, binDir string) int {
 	}
 
 	rewritten := RewriteArgs(args)
+	rewritten = rewriteResponseFileArgs(rewritten)
 
 	var exitCode int
 	switch {
