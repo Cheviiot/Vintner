@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"syscall"
 	"time"
 )
 
@@ -76,19 +75,17 @@ func newToolCommand(name string, args ...string) (tc *toolCommand, cleanup func(
 	setNewProcessGroup(cmd)
 	cg.apply(cmd.SysProcAttr)
 	// cmd.Cancel's default (Go 1.20+) only signals the immediate child;
-	// override it to reach the whole process group, same as
-	// forwardSignals - the wedged process a timeout exists to clean up is
-	// typically under wine, not wine itself. cg.kill() is a second,
-	// guaranteed-reach mechanism on top of that: a Wine-hosted process
-	// created with CREATE_NO_WINDOW (an ordinary background worker, e.g.
-	// an MSBuild node-reuse node) gets setsid()'d by Wine's ntdll before
-	// exec, moving it into a brand new Unix process group the kill below
-	// can never reach - see cgroup.go's doc comment for the full chain.
+	// override it to killAll (signals.go) instead, same as forwardSignals'
+	// own escalation - the wedged process a timeout exists to clean up is
+	// typically under wine, not wine itself, and can have setsid()'d itself
+	// out of reach of a plain process-group kill (see cgroup.go's doc
+	// comment for the full chain killAll's cgroup half exists for).
 	cmd.Cancel = func() error {
+		pid := 0
 		if cmd.Process != nil {
-			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+			pid = cmd.Process.Pid
 		}
-		cg.kill()
+		killAll(pid, cg)
 		return nil
 	}
 	cmd.WaitDelay = waitDelay

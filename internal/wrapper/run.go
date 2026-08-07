@@ -67,18 +67,21 @@ func Run(tool string, args []string, binDir string) int {
 		scriptDir = filepath.Dir(exePath)
 	}
 
-	if tool == "msbuild" {
-		chosen, note := selectToolchainDir(scriptDir, args)
+	var cfg *wineenv.Config
+	if s.resolveScriptDir != nil {
+		var note string
+		scriptDir, cfg, note = s.resolveScriptDir(scriptDir, args)
 		if note != "" {
 			fmt.Fprintln(os.Stderr, note)
 		}
-		scriptDir = chosen
 	}
-
-	cfg, err := wineenv.Load(scriptDir)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "vintner: loading install config:", err)
-		return 1
+	if cfg == nil {
+		var err error
+		cfg, err = wineenv.Load(scriptDir)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "vintner: loading install config:", err)
+			return 1
+		}
 	}
 	baseUnix, err := wineenv.FindBaseUnix(scriptDir)
 	if err != nil {
@@ -174,7 +177,7 @@ func runViaToolRelay(wineBin, relayExe, exePath string, args []string, paths *wi
 		fmt.Fprintln(os.Stderr, "vintner:", err)
 		return 1
 	}
-	stopSignals := forwardSignals(tc)
+	stopSignals := forwardSignals(tc.Process.Pid, tc.cg)
 	defer stopSignals()
 
 	var wg sync.WaitGroup
@@ -237,7 +240,7 @@ func runRawStdout(tc *toolCommand) int {
 		fmt.Fprintln(os.Stderr, "vintner:", err)
 		return 1
 	}
-	stopSignals := forwardSignals(tc)
+	stopSignals := forwardSignals(tc.Process.Pid, tc.cg)
 	defer stopSignals()
 
 	doneOut := make(chan struct{})
@@ -317,7 +320,7 @@ func runFiltered(tc *toolCommand, stdoutF, stderrF lineFilter) int {
 		fmt.Fprintln(os.Stderr, "vintner:", err)
 		return 1
 	}
-	stopSignals := forwardSignals(tc)
+	stopSignals := forwardSignals(tc.Process.Pid, tc.cg)
 	defer stopSignals()
 
 	doneOut := make(chan struct{})

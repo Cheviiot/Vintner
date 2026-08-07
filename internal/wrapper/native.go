@@ -70,7 +70,7 @@ func execInherit(args []string) int {
 	if err := tc.Start(); err != nil {
 		return 127
 	}
-	stopSignals := forwardSignals(tc)
+	stopSignals := forwardSignals(tc.Process.Pid, tc.cg)
 	defer stopSignals()
 	if err := tc.Wait(); err != nil {
 		if tc.timedOut() {

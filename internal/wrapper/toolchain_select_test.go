@@ -187,33 +187,45 @@ func saveConfig(t *testing.T, dir string, cfg *wineenv.Config) string {
 	return dir
 }
 
-func TestSelectToolchainDirNoEnvVarLeavesPrimaryAlone(t *testing.T) {
-	t.Setenv(toolchainsEnvVar, "")
-	primary := saveConfig(t, t.TempDir(), &wineenv.Config{PlatformToolset: "145"})
-
-	got, note := selectToolchainDir(primary, []string{"Foo.sln"})
-	if got != primary || note != "" {
-		t.Errorf("selectToolchainDir(...) = (%q, %q), want (%q, \"\")", got, note, primary)
-	}
-}
-
-func TestSelectToolchainDirSwitchesOnExactMatch(t *testing.T) {
-	root := t.TempDir()
+// setupEngineSln writes an Engine.vcxproj (pinned to vcxprojV142) plus an
+// LCClient.sln referencing it, under a fresh temp root - the fixture every
+// selectToolchainDir test below needs, shared instead of copy-pasted.
+func setupEngineSln(t *testing.T) (root, slnPath string) {
+	t.Helper()
+	root = t.TempDir()
 	writeFile(t, filepath.Join(root, "source", "Engine", "Engine.vcxproj"), vcxprojV142)
-	slnPath := filepath.Join(root, "LCClient.sln")
+	slnPath = filepath.Join(root, "LCClient.sln")
 	writeFile(t, slnPath, `Microsoft Visual Studio Solution File, Format Version 12.00
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Engine", "source\Engine\Engine.vcxproj", "{11111111-1111-1111-1111-111111111111}"
 EndProject
 `)
+	return root, slnPath
+}
+
+func TestSelectToolchainDirNoEnvVarLeavesPrimaryAlone(t *testing.T) {
+	t.Setenv(toolchainsEnvVar, "")
+	primary := saveConfig(t, t.TempDir(), &wineenv.Config{PlatformToolset: "145"})
+
+	got, cfg, note := selectToolchainDir(primary, []string{"Foo.sln"})
+	if got != primary || cfg != nil || note != "" {
+		t.Errorf("selectToolchainDir(...) = (%q, %v, %q), want (%q, nil, \"\")", got, cfg, note, primary)
+	}
+}
+
+func TestSelectToolchainDirSwitchesOnExactMatch(t *testing.T) {
+	root, slnPath := setupEngineSln(t)
 
 	primary := saveConfig(t, filepath.Join(root, "toolchain-default", "bin", "x64"), &wineenv.Config{PlatformToolset: "145"})
 	alt := saveConfig(t, filepath.Join(root, "toolchain-v142", "bin", "x64"), &wineenv.Config{PlatformToolset: "142"})
 
 	t.Setenv(toolchainsEnvVar, alt)
 
-	got, note := selectToolchainDir(primary, []string{slnPath, "/p:Configuration=LC_RUS"})
+	got, cfg, note := selectToolchainDir(primary, []string{slnPath, "/p:Configuration=LC_RUS"})
 	if got != alt {
 		t.Errorf("selectToolchainDir(...) binDir = %q, want %q (the v142 alt)", got, alt)
+	}
+	if cfg == nil || cfg.PlatformToolset != "142" {
+		t.Errorf("selectToolchainDir(...) cfg = %v, want the already-loaded v142 config (so the caller doesn't reload it)", cfg)
 	}
 	if note == "" {
 		t.Error("selectToolchainDir(...) note = \"\", want an explanatory message when switching")
@@ -221,13 +233,7 @@ EndProject
 }
 
 func TestSelectToolchainDirNoMatchFallsBackToPrimary(t *testing.T) {
-	root := t.TempDir()
-	writeFile(t, filepath.Join(root, "source", "Engine", "Engine.vcxproj"), vcxprojV142)
-	slnPath := filepath.Join(root, "LCClient.sln")
-	writeFile(t, slnPath, `Microsoft Visual Studio Solution File, Format Version 12.00
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Engine", "source\Engine\Engine.vcxproj", "{11111111-1111-1111-1111-111111111111}"
-EndProject
-`)
+	root, slnPath := setupEngineSln(t)
 
 	primary := saveConfig(t, filepath.Join(root, "toolchain-default", "bin", "x64"), &wineenv.Config{PlatformToolset: "145"})
 	// The only registered extra toolchain is also v145 - no v142 anywhere.
@@ -235,28 +241,28 @@ EndProject
 
 	t.Setenv(toolchainsEnvVar, alt)
 
-	got, note := selectToolchainDir(primary, []string{slnPath})
+	got, cfg, note := selectToolchainDir(primary, []string{slnPath})
 	if got != primary || note != "" {
 		t.Errorf("selectToolchainDir(...) = (%q, %q), want (%q, \"\") (no v142 install available)", got, note, primary)
+	}
+	if cfg == nil || cfg.PlatformToolset != "145" {
+		t.Errorf("selectToolchainDir(...) cfg = %v, want primary's already-loaded v145 config", cfg)
 	}
 }
 
 func TestSelectToolchainDirPrimaryAlreadyMatches(t *testing.T) {
-	root := t.TempDir()
-	writeFile(t, filepath.Join(root, "source", "Engine", "Engine.vcxproj"), vcxprojV142)
-	slnPath := filepath.Join(root, "LCClient.sln")
-	writeFile(t, slnPath, `Microsoft Visual Studio Solution File, Format Version 12.00
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Engine", "source\Engine\Engine.vcxproj", "{11111111-1111-1111-1111-111111111111}"
-EndProject
-`)
+	root, slnPath := setupEngineSln(t)
 
 	primary := saveConfig(t, filepath.Join(root, "toolchain-default", "bin", "x64"), &wineenv.Config{PlatformToolset: "142"})
 	alt := saveConfig(t, filepath.Join(root, "toolchain-other", "bin", "x64"), &wineenv.Config{PlatformToolset: "142"})
 
 	t.Setenv(toolchainsEnvVar, alt)
 
-	got, note := selectToolchainDir(primary, []string{slnPath})
+	got, cfg, note := selectToolchainDir(primary, []string{slnPath})
 	if got != primary || note != "" {
 		t.Errorf("selectToolchainDir(...) = (%q, %q), want (%q, \"\") (primary already the right generation)", got, note, primary)
+	}
+	if cfg == nil || cfg.PlatformToolset != "142" {
+		t.Errorf("selectToolchainDir(...) cfg = %v, want primary's already-loaded v142 config", cfg)
 	}
 }

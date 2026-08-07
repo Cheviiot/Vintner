@@ -26,6 +26,17 @@ type spec struct {
 	stdoutFilter lineFilter
 	stderrFilter lineFilter
 	postProcess  func(origArgs []string) // cl: fix up /P /Fi<file> output
+
+	// resolveScriptDir lets a tool override which <dest>/bin/<arch>
+	// directory Run() actually loads env.json from, given the one
+	// resolution otherwise settles on (VINTNER_BIN or argv0-derived) and
+	// the tool's own args - msbuild uses this to auto-select a toolchain
+	// matching the project's PlatformToolset (see toolchain_select.go).
+	// Returning a non-nil cfg alongside dir means Run() can skip its own
+	// wineenv.Load(dir), since resolveScriptDir already had to load it to
+	// decide; nil cfg falls through to the normal load. Every other tool
+	// leaves this nil and gets the default resolution untouched.
+	resolveScriptDir func(dir string, args []string) (resolvedDir string, cfg *wineenv.Config, note string)
 }
 
 // Tools lists every multi-call name this binary answers to, besides its own
@@ -44,7 +55,7 @@ var Tools = map[string]spec{
 	"midl":     {exeName: "midl.exe", dir: dirSDK},
 	"mt":       {exeName: "mt.exe", dir: dirSDK},
 	"rc":       {exeName: "rc.exe", dir: dirSDK},
-	"msbuild":  {exeName: "MSBuild.exe", dir: dirMSBuild, rawStdout: true},
+	"msbuild":  {exeName: "MSBuild.exe", dir: dirMSBuild, rawStdout: true, resolveScriptDir: selectToolchainDir},
 }
 
 // nativeTools are handled entirely without Wine.

@@ -7,25 +7,18 @@ import (
 	"testing"
 )
 
-func mkdirAll(t *testing.T, path string) {
-	t.Helper()
-	if err := os.MkdirAll(path, 0o755); err != nil {
-		t.Fatal(err)
-	}
-}
-
 func TestFindMSVCVersionPicksNewestComplete(t *testing.T) {
 	root := t.TempDir()
 	// An incomplete version dir (missing "lib") must be skipped even
 	// though it lexically sorts newest.
-	mkdirAll(t, filepath.Join(root, "14.99.99999", "bin"))
-	mkdirAll(t, filepath.Join(root, "14.99.99999", "include"))
-	mkdirAll(t, filepath.Join(root, "14.29.30133", "bin"))
-	mkdirAll(t, filepath.Join(root, "14.29.30133", "include"))
-	mkdirAll(t, filepath.Join(root, "14.29.30133", "lib"))
-	mkdirAll(t, filepath.Join(root, "14.16.27023", "bin"))
-	mkdirAll(t, filepath.Join(root, "14.16.27023", "include"))
-	mkdirAll(t, filepath.Join(root, "14.16.27023", "lib"))
+	mustMkdirAll(t, filepath.Join(root, "14.99.99999", "bin"))
+	mustMkdirAll(t, filepath.Join(root, "14.99.99999", "include"))
+	mustMkdirAll(t, filepath.Join(root, "14.29.30133", "bin"))
+	mustMkdirAll(t, filepath.Join(root, "14.29.30133", "include"))
+	mustMkdirAll(t, filepath.Join(root, "14.29.30133", "lib"))
+	mustMkdirAll(t, filepath.Join(root, "14.16.27023", "bin"))
+	mustMkdirAll(t, filepath.Join(root, "14.16.27023", "include"))
+	mustMkdirAll(t, filepath.Join(root, "14.16.27023", "lib"))
 
 	got, err := findMSVCVersion(root)
 	if err != nil {
@@ -38,7 +31,7 @@ func TestFindMSVCVersionPicksNewestComplete(t *testing.T) {
 
 func TestFindMSVCVersionNoneComplete(t *testing.T) {
 	root := t.TempDir()
-	mkdirAll(t, filepath.Join(root, "14.29.30133", "bin")) // missing include/lib
+	mustMkdirAll(t, filepath.Join(root, "14.29.30133", "bin")) // missing include/lib
 	if _, err := findMSVCVersion(root); err == nil {
 		t.Error("expected an error when no version dir has bin+include+lib")
 	}
@@ -53,9 +46,9 @@ func TestFindMSVCVersionEmptyDir(t *testing.T) {
 func TestFindSDKVersionPicksNewest(t *testing.T) {
 	root := t.TempDir()
 	for _, v := range []string{"10.0.17763.0", "10.0.26100.0", "10.0.22621.0"} {
-		mkdirAll(t, filepath.Join(root, v))
+		mustMkdirAll(t, filepath.Join(root, v))
 	}
-	mkdirAll(t, filepath.Join(root, "not-an-sdk-dir")) // must be ignored (no "10." prefix)
+	mustMkdirAll(t, filepath.Join(root, "not-an-sdk-dir")) // must be ignored (no "10." prefix)
 
 	got, err := findSDKVersion(root)
 	if err != nil {
@@ -68,7 +61,7 @@ func TestFindSDKVersionPicksNewest(t *testing.T) {
 
 func TestFindSDKVersionNoneFound(t *testing.T) {
 	root := t.TempDir()
-	mkdirAll(t, filepath.Join(root, "not-an-sdk-version"))
+	mustMkdirAll(t, filepath.Join(root, "not-an-sdk-version"))
 	if _, err := findSDKVersion(root); err == nil {
 		t.Error("expected an error when no dir starts with \"10.\"")
 	}
@@ -152,7 +145,7 @@ func TestCopyFileOverwritesDestination(t *testing.T) {
 func TestFixLibCasingAddsUppercaseSymlinks(t *testing.T) {
 	root := t.TempDir()
 	x64 := filepath.Join(root, "x64")
-	mkdirAll(t, x64)
+	mustMkdirAll(t, x64)
 	if err := os.WriteFile(filepath.Join(x64, "libcmt.lib"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}

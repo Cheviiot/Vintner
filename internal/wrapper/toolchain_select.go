@@ -129,6 +129,14 @@ func requestedPlatformToolset(projectArg string) string {
 				distinct = append(distinct, v)
 			}
 		}
+		if len(distinct) > 1 {
+			// Already ambiguous - the result is settled ("") no matter
+			// what the rest of files contains, so stop reading/parsing
+			// them. Matters for a solution with many projects: a real
+			// build can reference dozens, and each one costs a full
+			// os.ReadFile + regex pass (vcxprojPlatformToolsets).
+			return ""
+		}
 	}
 	if len(distinct) != 1 {
 		return ""
@@ -142,6 +150,14 @@ func requestedPlatformToolset(projectArg string) string {
 // an alternate whose real PlatformToolset (recorded in env.json at install
 // time, see internal/install's aliasPlatformToolsets) exactly matches what
 // args' project file pins and primaryBinDir's own real toolset doesn't.
+// Assigned as the "msbuild" spec's resolveScriptDir (tools.go), so Run()
+// (run.go) calls it in place of its own default resolution.
+//
+// The returned cfg is whichever env.json this function already had to
+// wineenv.Load to make its decision (primaryBinDir's own, or the matched
+// candidate's) - non-nil in every path that actually loaded one, so Run()
+// can skip re-loading the same file a second time. nil only on the
+// zero-cost early-return paths below, where nothing was loaded at all.
 //
 // Returns primaryBinDir unchanged, with note == "", whenever:
 // VINTNER_TOOLCHAINS is unset (the common case - zero cost, zero behavior
@@ -149,40 +165,43 @@ func requestedPlatformToolset(projectArg string) string {
 // unambiguous; primaryBinDir already matches; or no candidate matches
 // either (today's aliasing fallback still applies, exactly as before this
 // existed).
-func selectToolchainDir(primaryBinDir string, args []string) (binDir string, note string) {
+func selectToolchainDir(primaryBinDir string, args []string) (binDir string, cfg *wineenv.Config, note string) {
 	extra := os.Getenv(toolchainsEnvVar)
 	if extra == "" {
-		return primaryBinDir, ""
+		return primaryBinDir, nil, ""
 	}
 
 	projectArg := findProjectArg(args)
 	if projectArg == "" {
-		return primaryBinDir, ""
+		return primaryBinDir, nil, ""
 	}
 
 	wanted := requestedPlatformToolset(projectArg)
 	if wanted == "" {
-		return primaryBinDir, ""
+		return primaryBinDir, nil, ""
 	}
 
 	primaryCfg, err := wineenv.Load(primaryBinDir)
 	if err == nil && primaryCfg.PlatformToolset == wanted {
-		return primaryBinDir, ""
+		return primaryBinDir, primaryCfg, ""
 	}
 
 	for _, candidate := range filepath.SplitList(extra) {
-		cfg, err := wineenv.Load(candidate)
-		if err != nil || cfg.PlatformToolset != wanted {
+		candCfg, err := wineenv.Load(candidate)
+		if err != nil || candCfg.PlatformToolset != wanted {
 			continue
 		}
 		primaryReal := "unknown"
 		if primaryCfg != nil && primaryCfg.PlatformToolset != "" {
 			primaryReal = "v" + primaryCfg.PlatformToolset + ", aliased"
 		}
-		return candidate, "vintner: " + projectArg + " pins PlatformToolset v" + wanted +
+		return candidate, candCfg, "vintner: " + projectArg + " pins PlatformToolset v" + wanted +
 			"; using toolchain at " + candidate + " (real v" + wanted +
 			") instead of default (" + primaryReal + ")"
 	}
 
-	return primaryBinDir, ""
+	// primaryCfg may be nil here (wineenv.Load(primaryBinDir) failed) - the
+	// caller's own fallback wineenv.Load(primaryBinDir) will surface that
+	// same error properly instead of this function swallowing it silently.
+	return primaryBinDir, primaryCfg, ""
 }
