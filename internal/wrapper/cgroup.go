@@ -179,22 +179,39 @@ func (h *cgroupHandle) kill() {
 	_ = os.WriteFile(filepath.Join(h.dir, "cgroup.kill"), []byte("1"), 0)
 }
 
+// closeRetries and closeRetryInterval bound how long close() will retry
+// removing an ostensibly-empty cgroup directory - see close()'s doc comment
+// for why this needs to be generous rather than instant. Only the slow path
+// pays this cost: any attempt that succeeds returns immediately, so the
+// ordinary (already-empty-by-now) case is unaffected.
+const (
+	closeRetries       = 100
+	closeRetryInterval = 30 * time.Millisecond
+)
+
 // close releases h: closes the cgroup fd and removes the now-hopefully-
-// empty directory, retrying briefly since kill()'s effect isn't
-// synchronous. Failing to remove it isn't fatal - a single leftover empty
-// cgroup directory holds no process and costs nothing at rest - but see
-// sweepOrphanedCgroups for why leaving it around forever still isn't the
-// end of the story (this only runs at all if the process survives long
-// enough for its own defer to fire in the first place).
+// empty directory, retrying since a cgroup can outlive its last member
+// process by a little - not just after kill() (whose effect isn't
+// synchronous), but confirmed in practice even on a plain, non-killed exit:
+// wine's own process-tree teardown after a real cl.exe run occasionally
+// took long enough that an os.Remove attempted a couple hundred
+// milliseconds after Wait() returned still saw the directory as non-empty,
+// while the exact same os.Remove tried by hand a couple of seconds later
+// succeeded instantly. Failing to remove it even after this budget isn't
+// fatal - a leftover empty cgroup directory holds no process and costs
+// nothing at rest - but see sweepOrphanedCgroups for why leaving it around
+// forever still isn't the end of the story (this only runs at all if the
+// process survives long enough for its own defer to fire in the first
+// place).
 func (h *cgroupHandle) close() {
 	if h == nil {
 		return
 	}
 	h.f.Close()
-	for i := 0; i < 20; i++ {
+	for i := 0; i < closeRetries; i++ {
 		if err := os.Remove(h.dir); err == nil || os.IsNotExist(err) {
 			return
 		}
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(closeRetryInterval)
 	}
 }
