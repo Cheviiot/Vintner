@@ -4,7 +4,9 @@ package wrapper
 
 import (
 	"bufio"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -17,6 +19,62 @@ func TestCgroupHandleNilSafety(t *testing.T) {
 	h.apply(&syscall.SysProcAttr{}) // must not panic
 	h.kill()                        // must not panic
 	h.close()                       // must not panic
+}
+
+// TestSweepOrphanedCgroupsRemovesEmptyOnes is a plain-filesystem test:
+// sweepOrphanedCgroups only ever does filepath.Glob + os.Remove, so it
+// doesn't need a real cgroupfs to exercise the actual logic (name-prefix
+// matching, leaving non-matching siblings alone).
+func TestSweepOrphanedCgroupsRemovesEmptyOnes(t *testing.T) {
+	base := t.TempDir()
+	orphan := filepath.Join(base, "vintner-12345-6789")
+	keep := filepath.Join(base, "not-vintner-keep-me")
+	if err := os.Mkdir(orphan, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(keep, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	sweepOrphanedCgroups(base)
+
+	if _, err := os.Stat(orphan); !os.IsNotExist(err) {
+		t.Errorf("expected orphaned %s to be removed", orphan)
+	}
+	if _, err := os.Stat(keep); err != nil {
+		t.Errorf("expected non-vintner-prefixed %s to be left alone: %v", keep, err)
+	}
+}
+
+// TestNewCgroupSweepsRealOrphan reproduces the actual bug found in
+// practice: an empty vintner-* cgroup directory left behind by a killed
+// invocation (simulated here by just creating one by hand rather than
+// actually SIGKILLing a real vintner process) must be gone after the next
+// newCgroup() call, in the real cgroupfs.
+func TestNewCgroupSweepsRealOrphan(t *testing.T) {
+	requireCgroup(t) // skip if cgroups aren't usable here at all
+
+	base, ok := ownCgroupPath()
+	if !ok {
+		t.Skip("ownCgroupPath() failed after requireCgroup() succeeded - unexpected, but not this test's concern")
+	}
+	orphan := filepath.Join(base, "vintner-fake-orphan-999999999")
+	if err := os.Mkdir(orphan, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// In case the sweep itself doesn't run for some reason, don't leave a
+	// real orphan behind from this test.
+	t.Cleanup(func() { os.Remove(orphan) })
+
+	h := newCgroup()
+	if h == nil {
+		t.Fatal("newCgroup() returned nil right after requireCgroup() confirmed cgroups are usable")
+	}
+	defer h.close()
+
+	if _, err := os.Stat(orphan); !os.IsNotExist(err) {
+		t.Errorf("expected the manually-created orphan %s to be swept by newCgroup(), still exists", orphan)
+	}
 }
 
 // TestCgroupCleanupAvailableMatchesNewCgroup checks CgroupCleanupAvailable

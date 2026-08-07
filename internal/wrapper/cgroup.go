@@ -67,6 +67,7 @@ func newCgroup() *cgroupHandle {
 	if !ok {
 		return nil
 	}
+	sweepOrphanedCgroups(base)
 	dir := filepath.Join(base, fmt.Sprintf("vintner-%d-%d", os.Getpid(), time.Now().UnixNano()))
 	if err := os.Mkdir(dir, 0o755); err != nil {
 		return nil
@@ -77,6 +78,33 @@ func newCgroup() *cgroupHandle {
 		return nil
 	}
 	return &cgroupHandle{dir: dir, f: f}
+}
+
+// sweepOrphanedCgroups best-effort removes any leftover vintner-* cgroup
+// directories under base from a previous invocation whose own process got
+// SIGKILLed (an explicit kill, an OOM-killer, a crash) before its deferred
+// cleanup() (see newToolCommand, timeout.go) could run - Go's defer cannot
+// survive that, so an empty orphaned cgroup directory is the one thing
+// left behind. Harmless on its own (see close()'s doc comment), but
+// accumulates indefinitely over a machine's lifetime with nothing else to
+// reclaim it - confirmed in practice: found 3 real orphaned, empty
+// vintner-* cgroups still sitting under this session's own delegated
+// cgroup after nothing more than normal interrupted testing.
+//
+// Safe to call unconditionally on every newCgroup(): os.Remove on a
+// directory that's still a live cgroup (an actually-concurrent vintner
+// invocation, or another one's close() mid-retry) fails at the kernel
+// level exactly like rmdir on a non-empty directory would - left alone,
+// no different from before this existed. Only genuinely empty (orphaned)
+// ones are ever removed.
+func sweepOrphanedCgroups(base string) {
+	matches, err := filepath.Glob(filepath.Join(base, "vintner-*"))
+	if err != nil {
+		return
+	}
+	for _, m := range matches {
+		os.Remove(m)
+	}
 }
 
 // ownCgroupPath resolves the cgroupfs directory vintner's own process
@@ -128,8 +156,11 @@ func (h *cgroupHandle) kill() {
 
 // close releases h: closes the cgroup fd and removes the now-hopefully-
 // empty directory, retrying briefly since kill()'s effect isn't
-// synchronous. Failing to remove it isn't fatal - a leftover empty cgroup
-// directory is harmless, unlike a leaked process.
+// synchronous. Failing to remove it isn't fatal - a single leftover empty
+// cgroup directory holds no process and costs nothing at rest - but see
+// sweepOrphanedCgroups for why leaving it around forever still isn't the
+// end of the story (this only runs at all if the process survives long
+// enough for its own defer to fire in the first place).
 func (h *cgroupHandle) close() {
 	if h == nil {
 		return
