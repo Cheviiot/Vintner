@@ -203,7 +203,44 @@ func runViaToolRelay(wineBin, relayExe, exePath string, args []string, paths *wi
 	}()
 
 	err := tc.Wait()
-	wg.Wait()
+	// If wine (or toolrelay.exe itself) exited without ever opening one of
+	// the FIFOs for writing - wine failing to launch it, or a crash before
+	// it reaches its own FIFO-open code - the matching reader goroutine
+	// above is stuck forever in a blocking os.Open() waiting for a writer
+	// that's never coming now; nothing else unblocks it, not even
+	// VINTNER_TIMEOUT (which only bounds tc.Wait(), already returned by
+	// this point). Opening each FIFO for writing ourselves and immediately
+	// closing it is the standard fix: the kernel rendezvouses us with the
+	// blocked reader-open (letting it return), and closing right away with
+	// nothing written gives its next Read() a clean EOF.
+	//
+	// Retried on a short tick rather than fired once: right here, a reader
+	// goroutine above might simply not have reached its blocking os.Open()
+	// yet (goroutine-scheduling latency, not a real hang) - a single
+	// unblock attempt could lose that race and find no reader waiting yet,
+	// getting ENXIO right when it was actually needed. Retrying until the
+	// readers finish on their own costs nothing in the normal case (a
+	// toolrelay.exe that ran has already written and closed by the time
+	// tc.Wait() returns, so readersDone fires within a tick or two) and
+	// reliably still reaches a reader that was just slow to start blocking,
+	// in the actual hang case.
+	readersDone := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(readersDone)
+	}()
+	ticker := time.NewTicker(20 * time.Millisecond)
+	defer ticker.Stop()
+waitForReaders:
+	for {
+		select {
+		case <-readersDone:
+			break waitForReaders
+		case <-ticker.C:
+			unblockFifo(stdoutFifo)
+			unblockFifo(stderrFifo)
+		}
+	}
 
 	if err != nil {
 		if tc.timedOut() {
@@ -217,6 +254,22 @@ func runViaToolRelay(wineBin, relayExe, exePath string, args []string, paths *wi
 		return 1
 	}
 	return 0
+}
+
+// unblockFifo opens path for writing (non-blocking - there's no reason to
+// risk blocking here too) and immediately closes it, releasing any reader
+// stuck in a blocking open() on the same FIFO waiting for a writer. A FIFO
+// open() only succeeds once a reader and a writer rendezvous; if one is
+// already blocked waiting, opening from the other side always completes
+// that rendezvous immediately, non-blocking or not. See runViaToolRelay.
+func unblockFifo(path string) {
+	// os.OpenFile has no portable O_NONBLOCK - it's not one of Go's os.O_*
+	// flags - so this goes through syscall directly.
+	fd, err := syscall.Open(path, syscall.O_WRONLY|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return
+	}
+	syscall.Close(fd)
 }
 
 // runRawStdout runs cmd, copying its stdout/stderr through byte-for-byte

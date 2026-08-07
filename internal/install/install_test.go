@@ -97,18 +97,70 @@ func TestLnSCreatesSymlink(t *testing.T) {
 	}
 }
 
-func TestLnSNoopIfAlreadyExists(t *testing.T) {
+func TestLnSNoopIfAlreadyCorrect(t *testing.T) {
+	dir := t.TempDir()
+	link := filepath.Join(dir, "link.txt")
+	if err := os.Symlink("real.txt", link); err != nil {
+		t.Fatal(err)
+	}
+	if err := lnS("real.txt", link); err != nil {
+		t.Fatalf("lnS on an already-correct link should be a no-op, not error: %v", err)
+	}
+	got, _ := os.Readlink(link)
+	if got != "real.txt" {
+		t.Errorf("symlink target = %q, want unchanged %q", got, "real.txt")
+	}
+}
+
+// TestLnSRefreshesStaleSymlink covers the real install-time bug this
+// exists to fix: a symlink left over from a previous install (e.g. before
+// the tool's per-arch binary was renamed, or before a `vintner install`
+// re-run after rebuilding the binary) pointing at the wrong target used to
+// be silently left alone forever - `cl`/`link`/etc. would keep dispatching
+// to a stale binary with no indication anything was wrong. Found by hand
+// against a real installation still carrying symlinks to a pre-rename
+// binary name.
+func TestLnSRefreshesStaleSymlink(t *testing.T) {
 	dir := t.TempDir()
 	link := filepath.Join(dir, "link.txt")
 	if err := os.Symlink("something-else", link); err != nil {
 		t.Fatal(err)
 	}
 	if err := lnS("real.txt", link); err != nil {
-		t.Fatalf("lnS on an already-existing link should be a no-op, not error: %v", err)
+		t.Fatalf("lnS on a stale symlink should refresh it, not error: %v", err)
 	}
-	got, _ := os.Readlink(link)
-	if got != "something-else" {
-		t.Errorf("pre-existing symlink target was overwritten: got %q, want unchanged %q", got, "something-else")
+	got, err := os.Readlink(link)
+	if err != nil {
+		t.Fatalf("expected %s to still be a symlink: %v", link, err)
+	}
+	if got != "real.txt" {
+		t.Errorf("stale symlink target = %q, want refreshed to %q", got, "real.txt")
+	}
+}
+
+// TestLnSLeavesRealFileAlone confirms lnS only ever refreshes symlinks it
+// itself would have created - something that isn't a symlink at all at the
+// link path (a real file, however it got there) is left completely
+// untouched rather than replaced.
+func TestLnSLeavesRealFileAlone(t *testing.T) {
+	dir := t.TempDir()
+	link := filepath.Join(dir, "link.txt")
+	if err := os.WriteFile(link, []byte("not a symlink"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := lnS("real.txt", link); err != nil {
+		t.Fatalf("lnS on a real file should be a no-op, not error: %v", err)
+	}
+	fi, err := os.Lstat(link)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fi.Mode()&os.ModeSymlink != 0 {
+		t.Error("a real file at the link path was replaced with a symlink")
+	}
+	content, err := os.ReadFile(link)
+	if err != nil || string(content) != "not a symlink" {
+		t.Errorf("real file content changed: %q, %v", content, err)
 	}
 }
 

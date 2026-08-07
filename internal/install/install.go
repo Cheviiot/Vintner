@@ -416,8 +416,23 @@ func runQuiet(name string, args ...string) error {
 	return cmd.Run()
 }
 
+// lnS creates the symlink link -> target, refreshing it if link is already a
+// symlink pointing somewhere else (a stale wrapper from a previous install -
+// e.g. a rebuilt/upgraded vintner binary, or a project rename: this exact
+// scenario was hit by an installation still carrying symlinks to the tool's
+// pre-rename binary name, silently running that old build forever since
+// nothing ever pointed re-installs at the new one). Something at link that
+// isn't a symlink at all (a real file) is left alone either way - whatever
+// put it there, it's not this function's to replace.
 func lnS(target, link string) error {
-	if _, err := os.Lstat(link); err == nil {
+	if cur, err := os.Readlink(link); err == nil {
+		if cur == target {
+			return nil
+		}
+		if err := os.Remove(link); err != nil {
+			return err
+		}
+	} else if _, statErr := os.Lstat(link); statErr == nil {
 		return nil
 	}
 	return os.Symlink(target, link)
