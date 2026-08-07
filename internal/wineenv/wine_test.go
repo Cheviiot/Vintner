@@ -9,6 +9,7 @@ import (
 
 func fakeBinary(t *testing.T, name string) {
 	t.Helper()
+	t.Setenv("VINTNER_WINE", "")
 	bin := t.TempDir()
 	path := filepath.Join(bin, name)
 	if err := os.WriteFile(path, []byte("#!/bin/sh\n"), 0o755); err != nil {
@@ -18,6 +19,7 @@ func fakeBinary(t *testing.T, name string) {
 }
 
 func TestFindWinePrefersWine64(t *testing.T) {
+	t.Setenv("VINTNER_WINE", "")
 	bin := t.TempDir()
 	for _, name := range []string{"wine64", "wine"} {
 		if err := os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\n"), 0o755); err != nil {
@@ -47,7 +49,32 @@ func TestFindWineFallsBackToWine(t *testing.T) {
 	}
 }
 
+func TestFindWinePrefersVintnerWineEnv(t *testing.T) {
+	bin := t.TempDir()
+	for _, name := range []string{"wine64", "wine"} {
+		if err := os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", bin)
+
+	override := filepath.Join(t.TempDir(), "custom-wine")
+	if err := os.WriteFile(override, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("VINTNER_WINE", override)
+
+	got, err := FindWine()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != override {
+		t.Errorf("FindWine() = %q, want VINTNER_WINE (%q) to win over both PATH entries", got, override)
+	}
+}
+
 func TestFindWineErrorIsActionable(t *testing.T) {
+	t.Setenv("VINTNER_WINE", "")
 	t.Setenv("PATH", t.TempDir()) // empty dir, neither binary present
 
 	_, err := FindWine()
