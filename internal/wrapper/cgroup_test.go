@@ -21,10 +21,23 @@ func TestCgroupHandleNilSafety(t *testing.T) {
 	h.close()                       // must not panic
 }
 
+// ageCgroupDir backdates dir's mtime past sweepOrphanedAge, standing in for
+// a directory a past (real or simulated) invocation actually left behind a
+// while ago - sweepOrphanedCgroups now deliberately leaves anything younger
+// than that alone (see its doc comment), so every test that wants a
+// directory treated as sweepable has to age it first.
+func ageCgroupDir(t *testing.T, dir string) {
+	t.Helper()
+	old := time.Now().Add(-sweepOrphanedAge - time.Second)
+	if err := os.Chtimes(dir, old, old); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // TestSweepOrphanedCgroupsRemovesEmptyOnes is a plain-filesystem test:
-// sweepOrphanedCgroups only ever does filepath.Glob + os.Remove, so it
-// doesn't need a real cgroupfs to exercise the actual logic (name-prefix
-// matching, leaving non-matching siblings alone).
+// sweepOrphanedCgroups only ever does filepath.Glob + os.Stat + os.Remove,
+// so it doesn't need a real cgroupfs to exercise the actual logic
+// (name-prefix matching, leaving non-matching siblings alone).
 func TestSweepOrphanedCgroupsRemovesEmptyOnes(t *testing.T) {
 	base := t.TempDir()
 	orphan := filepath.Join(base, "vintner-12345-6789")
@@ -35,6 +48,7 @@ func TestSweepOrphanedCgroupsRemovesEmptyOnes(t *testing.T) {
 	if err := os.Mkdir(keep, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	ageCgroupDir(t, orphan)
 
 	sweepOrphanedCgroups(base)
 
@@ -46,11 +60,35 @@ func TestSweepOrphanedCgroupsRemovesEmptyOnes(t *testing.T) {
 	}
 }
 
+// TestSweepOrphanedCgroupsLeavesFreshOnesAlone is the regression test for
+// the actual race this exists to close: found in practice under a real
+// 16-way parallel build, where sweepOrphanedCgroups running in one
+// invocation removed another, genuinely concurrent invocation's just-
+// created (still process-less, so indistinguishable from a real orphan at
+// the time) cgroup directory out from under it, making that invocation's
+// cmd.Start() fail with a spurious "no such file or directory" against the
+// wine binary - CLONE_INTO_CGROUP referencing a cgroup fd whose backing
+// directory had just been rmdir'd. A directory younger than
+// sweepOrphanedAge must never be removed, no matter how empty it looks.
+func TestSweepOrphanedCgroupsLeavesFreshOnesAlone(t *testing.T) {
+	base := t.TempDir()
+	fresh := filepath.Join(base, "vintner-99999-1")
+	if err := os.Mkdir(fresh, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	sweepOrphanedCgroups(base)
+
+	if _, err := os.Stat(fresh); err != nil {
+		t.Errorf("a freshly-created cgroup dir was swept before it had a chance to be populated: %v", err)
+	}
+}
+
 // TestNewCgroupSweepsRealOrphan reproduces the actual bug found in
 // practice: an empty vintner-* cgroup directory left behind by a killed
-// invocation (simulated here by just creating one by hand rather than
-// actually SIGKILLing a real vintner process) must be gone after the next
-// newCgroup() call, in the real cgroupfs.
+// invocation (simulated here by just creating one by hand, aged past
+// sweepOrphanedAge, rather than actually SIGKILLing a real vintner process)
+// must be gone after the next newCgroup() call, in the real cgroupfs.
 func TestNewCgroupSweepsRealOrphan(t *testing.T) {
 	requireCgroup(t) // skip if cgroups aren't usable here at all
 
@@ -65,6 +103,7 @@ func TestNewCgroupSweepsRealOrphan(t *testing.T) {
 	// In case the sweep itself doesn't run for some reason, don't leave a
 	// real orphan behind from this test.
 	t.Cleanup(func() { os.Remove(orphan) })
+	ageCgroupDir(t, orphan)
 
 	h := newCgroup()
 	if h == nil {

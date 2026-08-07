@@ -80,6 +80,11 @@ func newCgroup() *cgroupHandle {
 	return &cgroupHandle{dir: dir, f: f}
 }
 
+// sweepOrphanedAge is how old a vintner-* cgroup directory must be before
+// sweepOrphanedCgroups will consider removing it - see that function's doc
+// comment for why this grace period is load-bearing, not just a nicety.
+const sweepOrphanedAge = 10 * time.Second
+
 // sweepOrphanedCgroups best-effort removes any leftover vintner-* cgroup
 // directories under base from a previous invocation whose own process got
 // SIGKILLed (an explicit kill, an OOM-killer, a crash) before its deferred
@@ -91,18 +96,38 @@ func newCgroup() *cgroupHandle {
 // vintner-* cgroups still sitting under this session's own delegated
 // cgroup after nothing more than normal interrupted testing.
 //
-// Safe to call unconditionally on every newCgroup(): os.Remove on a
-// directory that's still a live cgroup (an actually-concurrent vintner
-// invocation, or another one's close() mid-retry) fails at the kernel
-// level exactly like rmdir on a non-empty directory would - left alone,
-// no different from before this existed. Only genuinely empty (orphaned)
-// ones are ever removed.
+// Only removes directories older than sweepOrphanedAge - NOT safe to sweep
+// every vintner-* match unconditionally, despite an empty cgroup directory
+// looking indistinguishable at the kernel level whether it's a genuine
+// years-old orphan or one a concurrent newCgroup() (a different, real
+// parallel vintner invocation, e.g. a `-j16` build) created moments ago and
+// hasn't placed its first process into yet: cgroup.procs is empty in both
+// cases until CLONE_INTO_CGROUP actually happens at that other invocation's
+// cmd.Start(), so rmdir succeeds on either one exactly the same way. Racing
+// this - sweeping a directory a concurrent invocation already claimed but
+// hasn't populated yet - was confirmed in practice under a real 16-way
+// parallel build: cmd.Start() for the just-swept invocation failed with a
+// plain "no such file or directory" (CLONE_INTO_CGROUP referencing a cgroup
+// fd whose backing directory had just been rmdir'd out from under it),
+// surfacing as a spurious "fork/exec <wine path>: no such file or
+// directory" - misleading, since the wine binary itself was never missing.
+// A genuine orphan's mtime is frozen at its abandoned invocation's
+// newCgroup() call and never moves again, so it stays sweepable forever;
+// this only ever delays cleanup of a real orphan by at most
+// sweepOrphanedAge, while giving a concurrent invocation's cgroup ample
+// time (fork+exec normally lands within milliseconds, even under load) to
+// actually populate before it's considered fair game.
 func sweepOrphanedCgroups(base string) {
 	matches, err := filepath.Glob(filepath.Join(base, "vintner-*"))
 	if err != nil {
 		return
 	}
+	cutoff := time.Now().Add(-sweepOrphanedAge)
 	for _, m := range matches {
+		fi, err := os.Stat(m)
+		if err != nil || fi.ModTime().After(cutoff) {
+			continue
+		}
 		os.Remove(m)
 	}
 }
