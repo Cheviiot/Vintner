@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+
+	"github.com/Cheviiot/vintner/internal/wineenv"
 )
 
 func TestFindMSVCVersionPicksNewestComplete(t *testing.T) {
@@ -218,5 +220,46 @@ func TestFixLibCasingAddsUppercaseSymlinks(t *testing.T) {
 	}
 	if _, err := os.Lstat(filepath.Join(x64, "MSVCRT.lib")); err == nil {
 		t.Error("MSVCRT.lib symlink should not have been created - msvcrt.lib was never present")
+	}
+}
+
+// TestEnsureBundledWineNoOpsWithoutKnownArtifact covers today's real state:
+// no CI-published wine artifact exists yet (wineSHA256 in
+// internal/download/wine.go is empty until Phase 3 - see the
+// reflective-orbiting-sprout plan), so this must be a graceful, silent
+// miss - not a panic or a loud failure - exactly like bootstrapWine's
+// existing "no system wine either" fallback.
+func TestEnsureBundledWineNoOpsWithoutKnownArtifact(t *testing.T) {
+	home := t.TempDir()
+
+	ensureBundledWine(home) // must not panic
+
+	if _, ok := wineenv.FindBundledWine(home); ok {
+		t.Error("expected no bundled wine to have been installed (no artifact is known for any arch yet)")
+	}
+}
+
+// TestEnsureBundledWineSkipsWhenAlreadyPresent confirms a matching bundled
+// wine already on disk is left untouched rather than re-fetched - the
+// FindBundledWine check must run, and short-circuit, before any download
+// attempt.
+func TestEnsureBundledWineSkipsWhenAlreadyPresent(t *testing.T) {
+	home := t.TempDir()
+	binDir := filepath.Join(home, "wine", wineenv.BundledWineVersion, "bin")
+	mustMkdirAll(t, binDir)
+	winePath := filepath.Join(binDir, "wine")
+	const marker = "already installed - must not be touched"
+	if err := os.WriteFile(winePath, []byte(marker), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	ensureBundledWine(home)
+
+	got, err := os.ReadFile(winePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != marker {
+		t.Errorf("existing bundled wine was modified: got %q, want it left untouched (%q)", got, marker)
 	}
 }

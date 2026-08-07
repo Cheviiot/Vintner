@@ -92,11 +92,21 @@ func Run(tool string, args []string, binDir string) int {
 
 	toolExePath := filepath.Join(s.exeDir(paths), s.exeName)
 
-	wineBin, err := wineenv.FindWine()
+	// wineHome is vintner's own root (~/.vintner) - independent of
+	// scriptDir/baseUnix above, which name a *particular* toolchain
+	// install directory (a user can have several side by side - see
+	// toolchain_select.go); the bundled wine and its isolated prefix are
+	// shared across all of them, not tied to one. A resolution failure
+	// here (e.g. os.UserHomeDir() erroring) just means the bundled-wine
+	// lookup below never finds anything, falling through to
+	// VINTNER_WINE/system wine exactly as if wineHome were never set.
+	wineHome, _ := wineenv.DefaultHome()
+	wineBin, wineSource, err := wineenv.ResolveWine(wineHome)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "vintner:", err)
 		return 1
 	}
+	winePrefixEnv := wineenv.WinePrefixEnv(wineHome, wineSource)
 
 	rewritten := RewriteArgs(args)
 	rewritten = rewriteResponseFileArgs(rewritten)
@@ -114,7 +124,7 @@ func Run(tool string, args []string, binDir string) int {
 		msArgs = append(msbuildNodeReuseArgs(rewritten), msArgs...)
 		tc, cleanup := newToolCommand(wineBin, append([]string{toolExePath}, msArgs...)...)
 		defer cleanup()
-		env := buildEnv(paths)
+		env := buildEnv(paths, winePrefixEnv)
 		for k, v := range msbuildEnv(cfg, paths) {
 			env = append(env, k+"="+v)
 		}
@@ -124,11 +134,11 @@ func Run(tool string, args []string, binDir string) int {
 	default:
 		relay := filepath.Join(paths.BaseUnix, "bin", toolRelayName)
 		if fi, err := os.Stat(relay); err == nil && !fi.IsDir() {
-			exitCode = runViaToolRelay(wineBin, relay, toolExePath, rewritten, paths, s.stdoutFilter, s.stderrFilter)
+			exitCode = runViaToolRelay(wineBin, relay, toolExePath, rewritten, paths, winePrefixEnv, s.stdoutFilter, s.stderrFilter)
 		} else {
 			tc, cleanup := newToolCommand(wineBin, append([]string{toolExePath}, rewritten...)...)
 			defer cleanup()
-			tc.Env = buildEnv(paths)
+			tc.Env = buildEnv(paths, winePrefixEnv)
 			tc.Stdin = os.Stdin
 			exitCode = runFiltered(tc, s.stdoutFilter, s.stderrFilter)
 		}
@@ -148,7 +158,7 @@ func Run(tool string, args []string, binDir string) int {
 // 0xbb) survive Wine's own exit-code truncation, since toolrelay.exe
 // observes the real 32-bit exit code via Win32 before translating and
 // re-exiting with a value that fits in a byte.
-func runViaToolRelay(wineBin, relayExe, exePath string, args []string, paths *wineenv.Paths, stdoutF, stderrF lineFilter) int {
+func runViaToolRelay(wineBin, relayExe, exePath string, args []string, paths *wineenv.Paths, winePrefixEnv []string, stdoutF, stderrF lineFilter) int {
 	stdoutFifo := filepath.Join(os.TempDir(), fmt.Sprintf("vintner.stdout.%d", os.Getpid()))
 	stderrFifo := filepath.Join(os.TempDir(), fmt.Sprintf("vintner.stderr.%d", os.Getpid()))
 	os.Remove(stdoutFifo)
@@ -167,7 +177,7 @@ func runViaToolRelay(wineBin, relayExe, exePath string, args []string, paths *wi
 	cmdArgs := append([]string{relayExe, exePath}, args...)
 	tc, cleanup := newToolCommand(wineBin, cmdArgs...)
 	defer cleanup()
-	tc.Env = append(buildEnv(paths), "MSVCGOWINE_STDOUT="+stdoutFifo, "MSVCGOWINE_STDERR="+stderrFifo)
+	tc.Env = append(buildEnv(paths, winePrefixEnv), "MSVCGOWINE_STDOUT="+stdoutFifo, "MSVCGOWINE_STDERR="+stderrFifo)
 	if devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0); err == nil {
 		defer devNull.Close()
 		tc.Stdout = devNull
@@ -329,13 +339,23 @@ func drain(done <-chan struct{}) {
 	}
 }
 
-func buildEnv(p *wineenv.Paths) []string {
+// buildEnv assembles the environment for a wine-hosted tool invocation.
+// winePrefixEnv is wineenv.WinePrefixEnv's result ("WINEPREFIX=..." or nil)
+// - isolating WINEPREFIX only makes sense for vintner's own bundled wine
+// (see WinePrefixEnv's doc comment), so callers using system/VINTNER_WINE
+// pass nil and today's inherited-from-environment behavior is unchanged.
+func buildEnv(p *wineenv.Paths, winePrefixEnv []string) []string {
 	overrides := map[string]string{
 		"INCLUDE":          p.Include,
 		"LIB":              p.Lib,
 		"LIBPATH":          p.LibPath,
 		"WINEPATH":         p.WinePath,
 		"WINEDLLOVERRIDES": p.WineDLLOverrides,
+	}
+	for _, kv := range winePrefixEnv {
+		if i := strings.IndexByte(kv, '='); i >= 0 {
+			overrides[kv[:i]] = kv[i+1:]
+		}
 	}
 	base := os.Environ()
 	if _, set := os.LookupEnv("WINEDEBUG"); !set {

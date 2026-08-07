@@ -3,11 +3,56 @@ package wrapper
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/Cheviiot/vintner/internal/wineenv"
 )
+
+// findEnv returns the value of key in env ("KEY=value" entries), and
+// whether it was present at all.
+func findEnv(env []string, key string) (string, bool) {
+	prefix := key + "="
+	for _, kv := range env {
+		if strings.HasPrefix(kv, prefix) {
+			return strings.TrimPrefix(kv, prefix), true
+		}
+	}
+	return "", false
+}
+
+func TestBuildEnvLeavesWINEPREFIXAloneWithoutOverride(t *testing.T) {
+	t.Setenv("WINEPREFIX", "/some/inherited/prefix")
+
+	env := buildEnv(&wineenv.Paths{}, nil)
+
+	got, ok := findEnv(env, "WINEPREFIX")
+	if !ok || got != "/some/inherited/prefix" {
+		t.Errorf("WINEPREFIX = (%q, %v), want the inherited value untouched", got, ok)
+	}
+}
+
+func TestBuildEnvAppliesWinePrefixEnvOverride(t *testing.T) {
+	t.Setenv("WINEPREFIX", "/some/inherited/prefix")
+
+	env := buildEnv(&wineenv.Paths{}, []string{"WINEPREFIX=/isolated/bundled/prefix"})
+
+	got, ok := findEnv(env, "WINEPREFIX")
+	if !ok || got != "/isolated/bundled/prefix" {
+		t.Errorf("WINEPREFIX = (%q, %v), want the override to replace the inherited value", got, ok)
+	}
+	// Only one WINEPREFIX entry should survive, not both.
+	count := 0
+	for _, kv := range env {
+		if strings.HasPrefix(kv, "WINEPREFIX=") {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Errorf("found %d WINEPREFIX entries in the built env, want exactly 1", count)
+	}
+}
 
 // TestRunViaToolRelayDoesNotHangWhenRelayNeverOpensFifos reproduces the
 // scenario where wine (or toolrelay.exe itself) exits without ever opening
@@ -26,7 +71,7 @@ func TestRunViaToolRelayDoesNotHangWhenRelayNeverOpensFifos(t *testing.T) {
 
 	done := make(chan int, 1)
 	go func() {
-		done <- runViaToolRelay(fakeWine, "relay.exe", "tool.exe", nil, &wineenv.Paths{}, nil, nil)
+		done <- runViaToolRelay(fakeWine, "relay.exe", "tool.exe", nil, &wineenv.Paths{}, nil, nil, nil)
 	}()
 
 	select {

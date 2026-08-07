@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/Cheviiot/vintner/assets"
+	"github.com/Cheviiot/vintner/internal/download"
 	"github.com/Cheviiot/vintner/internal/lock"
 	"github.com/Cheviiot/vintner/internal/wineenv"
 )
@@ -357,20 +358,61 @@ func hostArch() (host, dotnetHost string) {
 	}
 }
 
-// bootstrapWine runs `wineboot --init` to set up the wine prefix ahead of
-// time, and reports whether wine is available at all (so callers can decide
-// whether to attempt building toolrelay.exe).
+// bootstrapWine ensures vintner's own bundled wine is fetched (see
+// ensureBundledWine - best-effort, falls back to whatever's already on
+// PATH the same way a network failure or missing system wine always has),
+// then runs `wineboot --init` to set up its prefix ahead of time. Reports
+// whether wine is available at all, so callers can decide whether to
+// attempt building toolrelay.exe.
 func bootstrapWine() bool {
-	wine, err := wineenv.FindWine()
+	home, homeErr := wineenv.DefaultHome()
+	if homeErr != nil {
+		fmt.Println("could not determine vintner home, skipping bundled wine fetch:", homeErr)
+	} else {
+		ensureBundledWine(home)
+	}
+
+	wine, source, err := wineenv.ResolveWine(home)
 	if err != nil {
 		fmt.Println("wine not found, skipping wineboot bootstrap and toolrelay build (install wine before running the tools)")
 		return false
 	}
-	fmt.Println("Bootstrapping wine prefix...")
-	if err := runQuiet(wine, "wineboot", "--init"); err != nil {
+	fmt.Printf("Bootstrapping wine prefix (%s)...\n", source)
+	if err := runQuiet(wine, wineenv.WinePrefixEnv(home, source), "wineboot", "--init"); err != nil {
 		fmt.Println("wineboot --init failed (continuing):", err)
 	}
 	return true
+}
+
+// ensureBundledWine fetches vintner's own minimal wine+Wine Mono build
+// (see internal/download/wine.go's doc comment for why it's needed at all)
+// into home, unless a matching one is already there. Best-effort like
+// bootstrapWine's own system-wine fallback: any failure here (no network,
+// no known artifact for this arch yet - see wineSHA256's doc comment)
+// just means ResolveWine falls through to VINTNER_WINE/system wine exactly
+// as if this function didn't exist, not an install failure.
+func ensureBundledWine(home string) {
+	if _, ok := wineenv.FindBundledWine(home); ok {
+		return
+	}
+	cacheDir := filepath.Join(home, "cache")
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		fmt.Println("could not create cache directory, skipping bundled wine fetch:", err)
+		return
+	}
+	if _, err := download.DownloadBundledWine(goArch(), cacheDir, home); err != nil {
+		fmt.Println("bundled wine not available, falling back to system wine if present:", err)
+	}
+}
+
+// goArch returns runtime.GOARCH translated to the arch names vintner's own
+// release artifacts (both the vintner binary and the bundled wine) are
+// published under - see .github/workflows/release.yml's build matrix.
+func goArch() string {
+	if runtime.GOARCH == "arm64" {
+		return "arm64"
+	}
+	return "amd64"
 }
 
 // buildToolRelay compiles the vendored toolrelay.cpp helper using the
@@ -410,9 +452,9 @@ func buildToolRelay(dest, destBin, host string) error {
 	return os.Rename(exePath, filepath.Join(destBin, "toolrelay.exe"))
 }
 
-func runQuiet(name string, args ...string) error {
+func runQuiet(name string, extraEnv []string, args ...string) error {
 	cmd := exec.Command(name, args...)
-	cmd.Env = append(os.Environ(), "WINEDEBUG=-all")
+	cmd.Env = append(append(os.Environ(), "WINEDEBUG=-all"), extraEnv...)
 	return cmd.Run()
 }
 

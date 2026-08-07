@@ -1,17 +1,13 @@
 package main
 
 import (
-	"os"
-	"path/filepath"
+	"github.com/Cheviiot/vintner/internal/wineenv"
 )
 
 // defaultToolchainDir is where `download`/`install` operate when the user
 // doesn't specify a directory: a hidden ~/.vintner, so it doesn't
-// clutter a plain `ls ~`.
+// clutter a plain `ls ~` - the same root wineenv.DefaultHome resolves the
+// bundled wine and its prefix under.
 func defaultToolchainDir() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(home, ".vintner"), nil
+	return wineenv.DefaultHome()
 }

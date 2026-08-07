@@ -58,12 +58,13 @@ func (d *doctorReport) fail(format string, args ...any) {
 func (d *doctorReport) checkWine() {
 	fmt.Println(i18n.T("doctor.section_wine"))
 
-	wineBin, err := wineenv.FindWine()
+	home, _ := wineenv.DefaultHome()
+	wineBin, source, err := wineenv.ResolveWine(home)
 	if err != nil {
 		d.fail("%s", err)
 		return
 	}
-	d.ok("found: %s", wineBin)
+	d.ok("found: %s (%s)", wineBin, source)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
