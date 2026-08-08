@@ -392,6 +392,15 @@ func bootstrapWine() bool {
 // just means ResolveWine falls through to VINTNER_WINE/system wine exactly
 // as if this function didn't exist, not an install failure.
 func ensureBundledWine(home string) {
+	ensureBundledWineForArch(home, goArch())
+}
+
+// ensureBundledWineForArch is ensureBundledWine with the arch parameterized
+// (rather than always the running binary's own goArch()), so a test can
+// exercise the "no artifact known" path with a made-up arch string without
+// ever reaching the network for whatever real arch the wineSHA256 map does
+// have a genuine hash for.
+func ensureBundledWineForArch(home, arch string) {
 	if _, ok := wineenv.FindBundledWine(home); ok {
 		return
 	}
@@ -400,7 +409,7 @@ func ensureBundledWine(home string) {
 		fmt.Println("could not create cache directory, skipping bundled wine fetch:", err)
 		return
 	}
-	if _, err := download.DownloadBundledWine(goArch(), cacheDir, home); err != nil {
+	if _, err := download.DownloadBundledWine(arch, cacheDir, home); err != nil {
 		fmt.Println("bundled wine not available, falling back to system wine if present:", err)
 	}
 }

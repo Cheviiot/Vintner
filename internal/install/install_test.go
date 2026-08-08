@@ -223,19 +223,22 @@ func TestFixLibCasingAddsUppercaseSymlinks(t *testing.T) {
 	}
 }
 
-// TestEnsureBundledWineNoOpsWithoutKnownArtifact covers today's real state:
-// no CI-published wine artifact exists yet (wineSHA256 in
-// internal/download/wine.go is empty until Phase 3 - see the
-// reflective-orbiting-sprout plan), so this must be a graceful, silent
-// miss - not a panic or a loud failure - exactly like bootstrapWine's
-// existing "no system wine either" fallback.
+// TestEnsureBundledWineNoOpsWithoutKnownArtifact covers an arch with no
+// published wine artifact (wineSHA256 in internal/download/wine.go only
+// has entries for the real published amd64/arm64 builds - see the
+// reflective-orbiting-sprout plan) - must be a graceful, silent miss, not
+// a panic or a loud failure, exactly like bootstrapWine's existing "no
+// system wine either" fallback. Deliberately uses a made-up arch rather
+// than calling ensureBundledWine(home) directly: this machine's own real
+// arch *does* have a genuine published hash now, and a unit test must
+// never reach the real network.
 func TestEnsureBundledWineNoOpsWithoutKnownArtifact(t *testing.T) {
 	home := t.TempDir()
 
-	ensureBundledWine(home) // must not panic
+	ensureBundledWineForArch(home, "does-not-exist-arch") // must not panic
 
 	if _, ok := wineenv.FindBundledWine(home); ok {
-		t.Error("expected no bundled wine to have been installed (no artifact is known for any arch yet)")
+		t.Error("expected no bundled wine to have been installed (no artifact is known for this arch)")
 	}
 }
 

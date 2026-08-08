@@ -41,13 +41,14 @@ const wineArtifactURLTemplate = "https://github.com/Cheviiot/vintner/releases/do
 // arch - a map (not consts) so tests can point it at a small fake payload
 // instead of the real ~100MB+ build.
 //
-// Empty until Phase 3 actually builds and publishes the CI artifact (see
-// the reflective-orbiting-sprout plan) - DownloadBundledWine fails closed
-// with a clear error for an arch with no known hash rather than skipping
-// verification, and ensureBundledWine (internal/install) treats that as a
-// best-effort miss, falling back to system wine exactly like "wine not
-// found" does today.
-var wineSHA256 = map[string]string{}
+// Published by the "Wine Release" GitHub Actions workflow
+// (.github/workflows/wine-release.yml), wine-11.14 + Wine Mono 11.2.0,
+// release tag wine-v1 - see that workflow's "Print next step" job output
+// for the SHA256SUMS a future version bump needs to update this from.
+var wineSHA256 = map[string]string{
+	"amd64": "7f5c0900fb375bbbd59e368b550c40656b9b64d97e735eeb65df465e7cc5e335",
+	"arm64": "284f9edb156e3eea5f15607e9187cd350a17f2d400fb83627614da92d2dc4928",
+}
 
 // DownloadBundledWine fetches (or reuses a cached copy of) vintner's own
 // minimal wine+Wine Mono build for arch into cacheDir, then unpacks it into
