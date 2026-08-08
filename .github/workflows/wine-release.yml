@@ -78,17 +78,21 @@ jobs:
       # typeinfo.c's inline-asm RTTI codegen. Confirmed by building the
       # exact same wine-11.14 tree successfully locally with clang 19.1.7 -
       # a genuine upstream clang bug, not anything about this configure
-      # invocation. Installing a known-working newer clang explicitly
-      # (rather than trusting whatever the runner image happens to default
-      # to) avoids depending on that.
+      # invocation.
+      #
+      # Installing clang-19 alone isn't enough to fix it: Ubuntu's
+      # "ubuntu-latest" image doesn't manage /usr/bin/clang through
+      # update-alternatives in a way that --install actually switches (it
+      # stays resolved to 18 even after registering 19 as an alternative,
+      # confirmed the hard way on a real CI run) - so CC/CXX are set
+      # explicitly for configure below instead of relying on the bare
+      # "clang"/"clang++" names on PATH.
       - name: Install a known-working clang
         run: |
           curl -fsSL https://apt.llvm.org/llvm.sh -o llvm.sh
           chmod +x llvm.sh
           sudo ./llvm.sh 19
-          sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-19 100
-          sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-19 100
-          clang --version
+          clang-19 --version
 
       - name: Checkout wine ${{ inputs.wine_tag }}
         run: |
@@ -97,6 +101,9 @@ jobs:
 
       - name: Configure (minimal, console-tools-only feature set)
         working-directory: wine-src
+        env:
+          CC: clang-19
+          CXX: clang++-19
         run: |
           ./configure --enable-archs=${{ matrix.configure_arch }} \
             --without-alsa --without-capi --without-coreaudio --without-cups \
