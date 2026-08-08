@@ -71,6 +71,25 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             git ca-certificates gcc make flex bison pkg-config
 
+      # Wine's PE-target DLLs are built directly by clang (winegcc's
+      # -b x86_64-windows/-b aarch64-windows path), not gcc - and Ubuntu's
+      # stock "ubuntu-latest" clang (18.1.3 as of this writing) crashes
+      # (SIGSEGV in its X86 Assembly Printer) on dlls/vcruntime140/
+      # typeinfo.c's inline-asm RTTI codegen. Confirmed by building the
+      # exact same wine-11.14 tree successfully locally with clang 19.1.7 -
+      # a genuine upstream clang bug, not anything about this configure
+      # invocation. Installing a known-working newer clang explicitly
+      # (rather than trusting whatever the runner image happens to default
+      # to) avoids depending on that.
+      - name: Install a known-working clang
+        run: |
+          curl -fsSL https://apt.llvm.org/llvm.sh -o llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 19
+          sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-19 100
+          sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-19 100
+          clang --version
+
       - name: Checkout wine ${{ inputs.wine_tag }}
         run: |
           git clone --depth 1 --branch "${{ inputs.wine_tag }}" \
