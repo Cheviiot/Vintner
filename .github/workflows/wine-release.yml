@@ -1,0 +1,162 @@
+name: Wine Release
+
+# Builds and publishes vintner's own minimal, purpose-built Wine (see
+# internal/download/wine.go's doc comment and the reflective-orbiting-
+# sprout plan for why: console-only MSVC tools need none of Wine's X11/
+# audio/video/Vulkan/USB/Bluetooth/32-bit-host stack, and Wine Mono -
+# despite the real Microsoft .NET runtime already being downloaded
+# alongside MSBuild.exe - turns out to be required too, since Wine's own
+# mscoree.dll intercepts any CLR-header PE at the loader level before ever
+# handing control to the real runtime).
+#
+# Deliberately decoupled from the main Release workflow (release.yml) and
+# vintner's own version tags: rebuilding Wine is a rare, deliberate action
+# (a version bump, a config change), not something that should happen on
+# every vintner release. Manual trigger only.
+#
+# After a successful run, internal/download/wine.go's wineSHA256 map needs
+# updating by hand with this run's printed SHA256SUMS - deliberately not
+# automated, so a human reviews the hash actually being pinned into every
+# vintner install before it's trusted.
+
+on:
+  workflow_dispatch:
+    inputs:
+      wine_tag:
+        description: "Wine release tag to build (git tag on gitlab.winehq.org/wine/wine)"
+        required: true
+        default: "wine-11.14"
+      mono_version:
+        description: "Matching Wine Mono version (WINE_MONO_VERSION in dlls/mscoree/mscoree_private.h for wine_tag)"
+        required: true
+        default: "11.2.0"
+      release_tag:
+        description: "GitHub release tag to publish the artifact under"
+        required: true
+        default: "wine-v1"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: wine-release-${{ inputs.release_tag }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    name: Build wine linux/${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Native builds only - cross-compiling Wine itself (as opposed to
+          # vintner's own trivially-cross-compiled Go binary) is a much
+          # bigger undertaking than running each build on its own real
+          # arch. Requires GitHub's arm64-hosted runner.
+          - arch: amd64
+            runner: ubuntu-latest
+            configure_arch: x86_64
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            configure_arch: aarch64
+    steps:
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            git ca-certificates gcc make flex bison pkg-config
+
+      - name: Checkout wine ${{ inputs.wine_tag }}
+        run: |
+          git clone --depth 1 --branch "${{ inputs.wine_tag }}" \
+            https://gitlab.winehq.org/wine/wine.git wine-src
+
+      - name: Configure (minimal, console-tools-only feature set)
+        working-directory: wine-src
+        run: |
+          ./configure --enable-archs=${{ matrix.configure_arch }} \
+            --without-alsa --without-capi --without-coreaudio --without-cups \
+            --without-dbus --without-ffmpeg --without-fontconfig --without-freetype \
+            --without-gphoto --without-gnutls --without-gssapi --without-gstreamer \
+            --without-hwloc --without-inotify --without-krb5 --without-netapi \
+            --without-opencl --without-opengl --without-oss --without-pcap \
+            --without-pcsclite --without-pulse --without-sane --without-sdl \
+            --without-udev --without-usb --without-v4l2 --without-vulkan \
+            --without-wayland --without-x --without-xcomposite --without-xcursor \
+            --without-xfixes --without-xinerama --without-xinput --without-xinput2 \
+            --without-xrandr --without-xrender --without-xshape --without-xshm \
+            --without-xxf86vm --disable-tests --disable-win16 \
+            --prefix=/opt/vintner-wine
+
+      - name: Build
+        working-directory: wine-src
+        run: make -j"$(nproc)"
+
+      - name: Install to staging
+        working-directory: wine-src
+        run: make install DESTDIR="${{ github.workspace }}/staging"
+
+      - name: Fetch matching Wine Mono
+        run: |
+          staged="${{ github.workspace }}/staging/opt/vintner-wine"
+          mkdir -p "$staged/share/wine/mono"
+          curl -fsSL -o mono.tar.xz \
+            "https://dl.winehq.org/wine/wine-mono/${{ inputs.mono_version }}/wine-mono-${{ inputs.mono_version }}-x86.tar.xz"
+          tar -xf mono.tar.xz -C "$staged/share/wine/mono"
+
+      - name: Smoke test
+        run: "${{ github.workspace }}/staging/opt/vintner-wine/bin/wine --version"
+
+      - name: Package artifact
+        run: |
+          cd "${{ github.workspace }}/staging/opt/vintner-wine"
+          zip -qr -y "${{ github.workspace }}/vintner-wine-linux-${{ matrix.arch }}.zip" .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: vintner-wine-linux-${{ matrix.arch }}
+          path: vintner-wine-linux-${{ matrix.arch }}.zip
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: Publish wine release
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Download all architectures
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: vintner-wine-linux-*
+          merge-multiple: true
+
+      - name: Checksums
+        run: sha256sum vintner-wine-linux-*.zip | tee SHA256SUMS
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          tag="${{ inputs.release_tag }}"
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" \
+              --title "vintner bundled wine (${{ inputs.release_tag }})" \
+              --notes "Minimal, purpose-built Wine (${{ inputs.wine_tag }}) + Wine Mono ${{ inputs.mono_version }} for vintner's own bundled-wine support (see internal/download/wine.go). Not a general-purpose Wine build - no X11/audio/video/Vulkan/USB/Bluetooth/32-bit host support."
+          fi
+          gh release upload "$tag" \
+            vintner-wine-linux-*.zip \
+            SHA256SUMS \
+            --clobber
+
+      - name: Print next step
+        run: |
+          echo "::notice::Update internal/download/wine.go's wineSHA256 map with the hashes in SHA256SUMS above, then commit."
+          cat SHA256SUMS
